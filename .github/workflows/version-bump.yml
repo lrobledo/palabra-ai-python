@@ -1,0 +1,128 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - alpha
+          - beta
+          - rc
+
+jobs:
+  create-version-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Get current version
+      id: current_version
+      run: |
+        python << 'EOF'
+        import re
+        import sys
+
+        with open('pyproject.toml', 'r') as f:
+            content = f.read()
+            match = re.search(r'version\s*=\s*["\']([0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc|dev)[0-9]+)?)["\']', content)
+            if match:
+                print(f"version={match.group(1)}")
+            else:
+                print('ERROR: Version not found', file=sys.stderr)
+                sys.exit(1)
+        EOF >> $GITHUB_OUTPUT
+
+    - name: Calculate new version
+      id: new_version
+      run: |
+        python << 'EOF'
+        import re
+        import os
+        import sys
+
+        current = "${{ steps.current_version.outputs.version }}"
+        bump_type = "${{ github.event.inputs.bump_type }}"
+
+        # Parse current version
+        match = re.match(r'([0-9]+)\.([0-9]+)\.([0-9]+)(?:(a|b|rc)([0-9]+))?', current)
+        if not match:
+            print(f"ERROR: Invalid version format: {current}", file=sys.stderr)
+            sys.exit(1)
+
+        major = int(match.group(1))
+        minor = int(match.group(2))
+        patch = int(match.group(3))
+        pre_type = match.group(4)
+        pre_num = int(match.group(5)) if match.group(5) else 0
+
+        # Calculate new version
+        if bump_type == "major":
+            major += 1
+            minor = 0
+            patch = 0
+            new_version = f"{major}.{minor}.{patch}"
+        elif bump_type == "minor":
+            minor += 1
+            patch = 0
+            new_version = f"{major}.{minor}.{patch}"
+        elif bump_type == "patch":
+            if pre_type:  # If current is pre-release, just remove pre-release
+                new_version = f"{major}.{minor}.{patch}"
+            else:
+                patch += 1
+                new_version = f"{major}.{minor}.{patch}"
+        elif bump_type in ["alpha", "beta", "rc"]:
+            if pre_type == bump_type[0]:  # Same pre-release type
+                pre_num += 1
+            else:
+                pre_num = 1
+            new_version = f"{major}.{minor}.{patch}{bump_type[0]}{pre_num}"
+
+        # Write to GitHub output
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"version={new_version}\n")
+
+        print(f"New version: {new_version}")
+        EOF
+
+    - name: Create and push tag
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+        # Create tag
+        git tag v${{ steps.new_version.outputs.version }}
+
+        # Push tag - this will trigger sync-tag-to-version workflow
+        git push origin v${{ steps.new_version.outputs.version }}
+
+    - name: Summary
+      run: |
+        echo "## Version Tag Created! 🎉" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **From**: ${{ steps.current_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **To**: ${{ steps.new_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Type**: ${{ github.event.inputs.bump_type }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag**: v${{ steps.new_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "The tag will trigger:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Update version in pyproject.toml to match the tag" >> $GITHUB_STEP_SUMMARY
+        echo "2. Move the tag to the commit with updated version" >> $GITHUB_STEP_SUMMARY
+        echo "3. Create a release automatically" >> $GITHUB_STEP_SUMMARY

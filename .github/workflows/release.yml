@@ -1,0 +1,152 @@
+name: Create Release with Assets
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}  # Use the tag ref to get the updated commit
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+
+    - name: Set up Python
+      run: uv python install 3.11
+
+    - name: Build package
+      run: |
+        # uv builds packages using hatchling
+        uv build
+
+    - name: Check package
+      run: |
+        # Install twine as a tool (not in system Python)
+        uv tool install twine
+        uv tool run twine check dist/*
+        ls -la dist/
+
+    - name: Get version from tag
+      id: get_version
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/v}"
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
+        name: Release ${{ steps.get_version.outputs.TAG_NAME }}
+        draft: false
+        prerelease: ${{ contains(steps.get_version.outputs.VERSION, 'a') || contains(steps.get_version.outputs.VERSION, 'b') || contains(steps.get_version.outputs.VERSION, 'rc') || contains(steps.get_version.outputs.VERSION, 'dev') }}
+        generate_release_notes: true
+        files: |
+          dist/*.whl
+          dist/*.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Docker image for package distribution
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Create Dockerfile for package
+      run: |
+        cat > Dockerfile << EOF
+        FROM python:3.11-slim
+        LABEL org.opencontainers.image.source=https://github.com/${{ github.repository }}
+        LABEL org.opencontainers.image.description="Palabra AI Python SDK"
+        LABEL org.opencontainers.image.licenses=MIT
+        LABEL org.opencontainers.image.url=https://github.com/${{ github.repository }}
+        LABEL org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
+        LABEL org.opencontainers.image.vendor="${{ github.repository_owner }}"
+        LABEL org.opencontainers.image.version="${{ steps.get_version.outputs.VERSION }}"
+
+        COPY dist/*.whl /tmp/
+        RUN pip install /tmp/*.whl && rm /tmp/*.whl
+
+        # This is a library image, not meant to be run directly
+        CMD ["python", "-c", "import palabra_ai; print(f'Palabra AI SDK v{palabra_ai.__version__} installed')"]
+        EOF
+
+    - name: Build and push Docker image with package
+      run: |
+        PACKAGE_VERSION=${{ steps.get_version.outputs.VERSION }}
+        # Convert repository owner to lowercase for Docker
+        OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        # Extract repository name from full repository path
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+        # Remove 'draft-' prefix if present for cleaner image name
+        IMAGE_BASE_NAME=$(echo "$REPO_NAME" | sed 's/^draft-//')
+        IMAGE_NAME=ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME}
+
+        docker build -t $IMAGE_NAME:$PACKAGE_VERSION -t $IMAGE_NAME:latest .
+        docker push $IMAGE_NAME:$PACKAGE_VERSION
+        docker push $IMAGE_NAME:latest
+
+        echo "📦 Pushed Docker images:"
+        echo "  - $IMAGE_NAME:$PACKAGE_VERSION"
+        echo "  - $IMAGE_NAME:latest"
+
+        # Save image name for use in summary
+        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+        echo "IMAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+
+    # UNCOMMENT TO ENABLE PYPI PUBLISHING WITH UV
+    # Prerequisites:
+    # 1. Go to https://pypi.org/manage/account/token/
+    # 2. Create new API token (preferably scoped to project if it exists)
+    # 3. Go to GitHub repo Settings → Secrets and variables → Actions
+    # 4. Add new secret named PYPI_API_TOKEN with the token value
+    # 5. Uncomment the section below:
+
+    # - name: Get package name from pyproject.toml
+    #   id: get_package_name
+    #   run: |
+    #     PACKAGE_NAME=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['name'])")
+    #     echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+    # - name: Publish to PyPI
+    #   env:
+    #     UV_PUBLISH_USERNAME: __token__
+    #     UV_PUBLISH_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+    #   run: |
+    #     # Publish to PyPI using uv
+    #     uv publish
+    #     echo "📦 Published to PyPI: https://pypi.org/project/${{ steps.get_package_name.outputs.package_name }}/"
+
+    - name: Release Summary
+      run: |
+        echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Package Information" >> $GITHUB_STEP_SUMMARY
+        echo "- **Repository**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag**: ${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Published Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- **GitHub Release**: https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Docker Image**: \`${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 Installation" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# Docker" >> $GITHUB_STEP_SUMMARY
+        echo "docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "# From release assets" >> $GITHUB_STEP_SUMMARY
+        echo "pip install https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.TAG_NAME }}/palabra_ai-${{ steps.get_version.outputs.VERSION }}-py3-none-any.whl" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
