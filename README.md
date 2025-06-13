@@ -6,11 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![codecov](https://codecov.io/gh/PalabraAI/palabra-ai-python/branch/main/graph/badge.svg?token=HRQAJ5VFY7)](https://codecov.io/gh/PalabraAI/palabra-ai-python)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/PalabraAI/palabra-ai-python/pkgs/container/palabra-ai-python)
-
-<!-- Uncomment after publishing to PyPI:
 [![PyPI version](https://badge.fury.io/py/palabra-ai.svg)](https://badge.fury.io/py/palabra-ai)
-[![Downloads](https://pepy.tech/badge/palabra-ai)](https://pepy.tech/project/palabra-ai)
--->
+[![Downloads](https://pepy.tech/badge/palabra-ai)](https://pepy.tech/projects/palabra-ai)
+
 
 <!-- Uncomment after setting up Codecov:
 [![codecov](https://codecov.io/gh/PalabraAI/palabra-ai-python/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/PalabraAI/palabra-ai-python)
@@ -322,7 +320,7 @@ from palabra_ai import (
 - ✅ GitHub Actions CI/CD
 - ✅ Docker packaging
 - ✅ Python 3.11, 3.12, 3.13 support
-- ⏳ PyPI publication (coming soon)
+- ✅ PyPI publication (coming soon)
 - ⏳ Code coverage reporting (setup required)
 - ⏳ Documentation site (coming soon)
 
@@ -341,7 +339,7 @@ from palabra_ai import (
 - Documentation: [https://docs.palabra.ai](https://docs.palabra.ai)
 - API Reference: [https://docs.palabra.ai/api](https://docs.palabra.ai/api)
 - Issues: [GitHub Issues](https://github.com/PalabraAI/palabra-ai-python/issues)
-- Email: api.support@palabra.ai
+- Email: info@palabra.ai
 
 ## License
 
