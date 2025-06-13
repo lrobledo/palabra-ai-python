@@ -43,6 +43,16 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
+    # Publish to PyPI FIRST (before GitHub Release and Docker)
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      # No 'with' parameters needed - OIDC authentication is automatic
+      # The action will:
+      # 1. Request OIDC token from GitHub
+      # 2. Exchange it with PyPI for temporary API token
+      # 3. Upload the package using that token
+      # Your pending publisher configuration will be converted to active publisher on first use
+
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
@@ -64,6 +74,32 @@ jobs:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+
+    # Try to link the package to this repository if it exists
+    - name: Link Docker package to repository
+      continue-on-error: true
+      run: |
+        OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+        REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+        IMAGE_BASE_NAME=$(echo "$REPO_NAME" | sed 's/^draft-//')
+        
+        # Try to link the package to this repository
+        echo "Attempting to link ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME} to ${{ github.repository }}..."
+        
+        # Get repository ID
+        REPO_ID=$(curl -s \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          "https://api.github.com/repos/${{ github.repository }}" | jq -r '.id')
+        
+        if [ "$REPO_ID" != "null" ] && [ -n "$REPO_ID" ]; then
+          # Try to link the package to this repository
+          curl -X PUT \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${IMAGE_BASE_NAME}" \
+            -d "{\"repository_id\": ${REPO_ID}}" || true
+        fi
 
     - name: Create Dockerfile for package
       run: |
@@ -96,26 +132,23 @@ jobs:
         IMAGE_NAME=ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME}
         
         docker build -t $IMAGE_NAME:$PACKAGE_VERSION -t $IMAGE_NAME:latest .
-        docker push $IMAGE_NAME:$PACKAGE_VERSION
-        docker push $IMAGE_NAME:latest
         
-        echo "📦 Pushed Docker images:"
-        echo "  - $IMAGE_NAME:$PACKAGE_VERSION"
-        echo "  - $IMAGE_NAME:latest"
+        # Try to push, but don't fail the whole workflow if it doesn't work
+        if docker push $IMAGE_NAME:$PACKAGE_VERSION && docker push $IMAGE_NAME:latest; then
+          echo "📦 Successfully pushed Docker images:"
+          echo "  - $IMAGE_NAME:$PACKAGE_VERSION"
+          echo "  - $IMAGE_NAME:latest"
         
-        # Save image name for use in summary
-        echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-        echo "IMAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
-
-    # Publish to PyPI using OIDC (no tokens needed!)
-    - name: Publish to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
-      # No 'with' parameters needed - OIDC authentication is automatic
-      # The action will:
-      # 1. Request OIDC token from GitHub
-      # 2. Exchange it with PyPI for temporary API token
-      # 3. Upload the package using that token
-      # Your pending publisher configuration will be converted to active publisher on first use
+          # Save image name for use in summary
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          echo "IMAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
+          echo "DOCKER_PUSH_SUCCESS=true" >> $GITHUB_ENV
+        else
+          echo "⚠️ Failed to push Docker images to $IMAGE_NAME"
+          echo "This might be due to permissions or existing package conflicts"
+          echo "PyPI publishing will continue..."
+          echo "DOCKER_PUSH_SUCCESS=false" >> $GITHUB_ENV
+        fi
 
     - name: Release Summary
       run: |
@@ -128,7 +161,11 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🚀 Published Artifacts" >> $GITHUB_STEP_SUMMARY
         echo "- **GitHub Release**: https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Docker Image**: \`${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ env.DOCKER_PUSH_SUCCESS }}" == "true" ]; then
+          echo "- **Docker Image**: \`${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Docker Image**: ⚠️ Failed to publish (permissions issue)" >> $GITHUB_STEP_SUMMARY
+        fi
         echo "- **PyPI Package**: https://pypi.org/project/palabra-ai/" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📥 Installation" >> $GITHUB_STEP_SUMMARY
@@ -136,9 +173,11 @@ jobs:
         echo "# PyPI" >> $GITHUB_STEP_SUMMARY
         echo "pip install palabra-ai==${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "# Docker" >> $GITHUB_STEP_SUMMARY
-        echo "docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ env.DOCKER_PUSH_SUCCESS }}" == "true" ]; then
+          echo "# Docker" >> $GITHUB_STEP_SUMMARY
+          echo "docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
         echo "# From release assets" >> $GITHUB_STEP_SUMMARY
         echo "pip install https://github.com/${{ github.repository }}/releases/download/${{ steps.get_version.outputs.TAG_NAME }}/palabra_ai-${{ steps.get_version.outputs.VERSION }}-py3-none-any.whl" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
