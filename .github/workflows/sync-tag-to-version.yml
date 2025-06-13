@@ -27,53 +27,77 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Tag: $TAG_NAME, Version: $VERSION"
 
-    - name: Update version in pyproject.toml and __init__.py
+    - name: Update version in pyproject.toml, __init__.py and uv.lock
       run: |
         VERSION="${{ steps.extract_version.outputs.version }}"
-        
-        # Update pyproject.toml and __init__.py using Python for safety
+
+        # Update pyproject.toml, __init__.py and uv.lock using Python for safety
         python << 'EOF'
         import re
         import os
-        
+
         version = os.environ.get('VERSION', '${{ steps.extract_version.outputs.version }}')
-        
+
         # Update pyproject.toml
         with open('pyproject.toml', 'r') as f:
             content = f.read()
-        
+
         # Replace version - handle any spacing and quote style
         pattern = r'(version\s*=\s*["\'])([0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc|dev)[0-9]+)?)(["\'])'
         replacement = rf'\g<1>{version}\g<3>'
         content = re.sub(pattern, replacement, content)
-        
+
         with open('pyproject.toml', 'w') as f:
             f.write(content)
-        
+
         # Update src/palabra_ai/__init__.py
         with open('src/palabra_ai/__init__.py', 'r') as f:
             content = f.read()
-        
+
         # Replace __version__ - handle any spacing and quote style
         pattern = r'(__version__\s*=\s*["\'])([0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc|dev)[0-9]+)?)(["\'])'
         replacement = rf'\g<1>{version}\g<3>'
         content = re.sub(pattern, replacement, content)
-        
+
         with open('src/palabra_ai/__init__.py', 'w') as f:
             f.write(content)
+
+        # Update uv.lock if it exists
+        if os.path.exists('uv.lock'):
+            with open('uv.lock', 'r') as f:
+                content = f.read()
+
+            # Find and update the version in the palabra-ai package section
+            # Pattern to match the package block
+            pattern = r'(\[\[package\]\]\s*\nname\s*=\s*"palabra-ai"\s*\nversion\s*=\s*")[^"]+(")'
+            replacement = rf'\g<1>{version}\g<2>'
+            content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+
+            with open('uv.lock', 'w') as f:
+                f.write(content)
         EOF
-        
+
         # Configure git
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        
+
         # Check if there are changes
         if git diff --quiet; then
           echo "No changes needed - version already matches tag"
           echo "skip_update=true" >> $GITHUB_ENV
         else
+          # List changed files
+          echo "Changed files:"
+          git diff --name-only
+
           # Commit changes
           git add pyproject.toml src/palabra_ai/__init__.py
+
+          # Add uv.lock if it was modified
+          if [ -f "uv.lock" ] && git diff --name-only | grep -q "uv.lock"; then
+            git add uv.lock
+          fi
+
           git commit -m "Update version to $VERSION from tag ${{ steps.extract_version.outputs.tag_name }}"
           echo "skip_update=false" >> $GITHUB_ENV
         fi
@@ -82,27 +106,32 @@ jobs:
       if: env.skip_update == 'false'
       run: |
         TAG_NAME="${{ steps.extract_version.outputs.tag_name }}"
-        
+
         # Push the commit to main
         git push origin HEAD:main
-        
+
         # Force update the tag to point to the new commit
         git tag -f $TAG_NAME
         git push origin $TAG_NAME --force
-        
+
         echo "✅ Tag $TAG_NAME now points to the commit with updated version"
 
     - name: Summary
       run: |
         if [ "${{ env.skip_update }}" == "true" ]; then
           echo "## No Update Needed 🟢" >> $GITHUB_STEP_SUMMARY
-          echo "Version in pyproject.toml and __init__.py already matches tag ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "Version in pyproject.toml, __init__.py and uv.lock already matches tag ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
         else
           echo "## Version Updated! 🎉" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Tag**: ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Action**: Updated pyproject.toml and __init__.py, moved tag to new commit" >> $GITHUB_STEP_SUMMARY
+          echo "- **Updated files**:" >> $GITHUB_STEP_SUMMARY
+          echo "  - pyproject.toml" >> $GITHUB_STEP_SUMMARY
+          echo "  - src/palabra_ai/__init__.py" >> $GITHUB_STEP_SUMMARY
+          if [ -f "uv.lock" ]; then
+            echo "  - uv.lock" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "The release workflow will start automatically for the updated tag." >> $GITHUB_STEP_SUMMARY
         fi
