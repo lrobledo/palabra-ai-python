@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write  # MANDATORY for OIDC PyPI publishing
 
     steps:
     - uses: actions/checkout@v4
@@ -75,10 +76,10 @@ jobs:
         LABEL org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
         LABEL org.opencontainers.image.vendor="${{ github.repository_owner }}"
         LABEL org.opencontainers.image.version="${{ steps.get_version.outputs.VERSION }}"
-
+        
         COPY dist/*.whl /tmp/
         RUN pip install /tmp/*.whl && rm /tmp/*.whl
-
+        
         # This is a library image, not meant to be run directly
         CMD ["python", "-c", "import palabra_ai; print(f'Palabra AI SDK v{palabra_ai.__version__} installed')"]
         EOF
@@ -93,41 +94,28 @@ jobs:
         # Remove 'draft-' prefix if present for cleaner image name
         IMAGE_BASE_NAME=$(echo "$REPO_NAME" | sed 's/^draft-//')
         IMAGE_NAME=ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME}
-
+        
         docker build -t $IMAGE_NAME:$PACKAGE_VERSION -t $IMAGE_NAME:latest .
         docker push $IMAGE_NAME:$PACKAGE_VERSION
         docker push $IMAGE_NAME:latest
-
+        
         echo "📦 Pushed Docker images:"
         echo "  - $IMAGE_NAME:$PACKAGE_VERSION"
         echo "  - $IMAGE_NAME:latest"
-
+        
         # Save image name for use in summary
         echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
         echo "IMAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
 
-    # UNCOMMENT TO ENABLE PYPI PUBLISHING WITH UV
-    # Prerequisites:
-    # 1. Go to https://pypi.org/manage/account/token/
-    # 2. Create new API token (preferably scoped to project if it exists)
-    # 3. Go to GitHub repo Settings → Secrets and variables → Actions
-    # 4. Add new secret named PYPI_API_TOKEN with the token value
-    # 5. Uncomment the section below:
-
-    # - name: Get package name from pyproject.toml
-    #   id: get_package_name
-    #   run: |
-    #     PACKAGE_NAME=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['name'])")
-    #     echo "package_name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
-
-    # - name: Publish to PyPI
-    #   env:
-    #     UV_PUBLISH_USERNAME: __token__
-    #     UV_PUBLISH_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-    #   run: |
-    #     # Publish to PyPI using uv
-    #     uv publish
-    #     echo "📦 Published to PyPI: https://pypi.org/project/${{ steps.get_package_name.outputs.package_name }}/"
+    # Publish to PyPI using OIDC (no tokens needed!)
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      # No 'with' parameters needed - OIDC authentication is automatic
+      # The action will:
+      # 1. Request OIDC token from GitHub
+      # 2. Exchange it with PyPI for temporary API token
+      # 3. Upload the package using that token
+      # Your pending publisher configuration will be converted to active publisher on first use
 
     - name: Release Summary
       run: |
@@ -141,9 +129,13 @@ jobs:
         echo "### 🚀 Published Artifacts" >> $GITHUB_STEP_SUMMARY
         echo "- **GitHub Release**: https://github.com/${{ github.repository }}/releases/tag/${{ steps.get_version.outputs.TAG_NAME }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Docker Image**: \`${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **PyPI Package**: https://pypi.org/project/palabra-ai/" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📥 Installation" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "# PyPI" >> $GITHUB_STEP_SUMMARY
+        echo "pip install palabra-ai==${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
         echo "# Docker" >> $GITHUB_STEP_SUMMARY
         echo "docker pull ${{ env.IMAGE_NAME }}:${{ env.IMAGE_VERSION }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
