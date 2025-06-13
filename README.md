@@ -7,8 +7,9 @@
 [![codecov](https://codecov.io/gh/PalabraAI/palabra-ai-python/branch/main/graph/badge.svg?token=HRQAJ5VFY7)](https://codecov.io/gh/PalabraAI/palabra-ai-python)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/PalabraAI/palabra-ai-python/pkgs/container/palabra-ai-python)
 [![PyPI version](https://badge.fury.io/py/palabra-ai.svg)](https://badge.fury.io/py/palabra-ai)
+<!-- Uncomment when will available:
 [![Downloads](https://pepy.tech/badge/palabra-ai)](https://pepy.tech/projects/palabra-ai)
-
+-->
 
 <!-- Uncomment after setting up Codecov:
 [![codecov](https://codecov.io/gh/PalabraAI/palabra-ai-python/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/PalabraAI/palabra-ai-python)
