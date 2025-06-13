@@ -274,10 +274,10 @@ output_devices = devman.get_output_devices()
 ```python
 from palabra_ai import (
     # English variants - 1.5+ billion speakers (including L2)
-    EN, EN_AU, EN_CA, EN_GB, EN_ORPHEUS, EN_PALABRA_LLM, EN_US,
+    EN, EN_AU, EN_CA, EN_GB, EN_US,
 
     # Chinese - 1.3+ billion speakers
-    ZH, ZH_ORPHEUS,
+    ZH,
 
     # Hindi - 600+ million speakers
     HI,
@@ -289,7 +289,7 @@ from palabra_ai import (
     AR, AR_AE, AR_SA,
 
     # French variants - 280+ million speakers
-    FR, FR_CA, FR_ORPHEUS,
+    FR, FR_CA,
 
     # Portuguese variants - 260+ million speakers
     PT, PT_BR,
@@ -298,13 +298,13 @@ from palabra_ai import (
     RU,
 
     # Japanese & Korean - 200+ million speakers combined
-    JA, KO, KO_ORPHEUS,
+    JA, KO,
 
     # Southeast Asian languages - 400+ million speakers
     ID, VN, TA, MS, FIL,
 
     # Germanic languages - 150+ million speakers
-    DE, DE_ORPHEUS, NL, SV, NO, DA,
+    DE, NL, SV, NO, DA,
 
     # Other European languages - 300+ million speakers
     TR, IT, PL, UK, RO, EL, HU, CS, BG, SK, FI, HR,
