@@ -1,12 +1,12 @@
 from palabra_ai.adapter import (
     BufferReader,
     BufferWriter,
-    PipeWrapper,  # noqa: F401
     DeviceManager,
     DeviceReader,
     DeviceWriter,
     FileReader,
     FileWriter,
+    PipeWrapper,  # noqa: F401
 )  # noqa: F401
 from palabra_ai.client import PalabraAI  # noqa: F401
 from palabra_ai.config import Config, SourceLang, TargetLang  # noqa: F401

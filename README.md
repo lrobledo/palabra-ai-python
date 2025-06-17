@@ -4,7 +4,7 @@
 [![Release](https://github.com/PalabraAI/palabra-ai-python/actions/workflows/release.yml/badge.svg)](https://github.com/PalabraAI/palabra-ai-python/actions/workflows/release.yml)
 [![Python Versions](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue)](https://github.com/PalabraAI/palabra-ai-python)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![codecov](https://codecov.io/gh/PalabraAI/palabra-ai-python/branch/main/graph/badge.svg?token=HRQAJ5VFY7)](https://codecov.io/gh/PalabraAI/palabra-ai-python)
+[![codecov](https://codecov.io/gh/PalabraAI/palabra-ai-python/graph/badge.svg?token=HRQAJ5VFY7)](https://codecov.io/gh/PalabraAI/palabra-ai-python)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/PalabraAI/palabra-ai-python/pkgs/container/palabra-ai-python)
 [![PyPI version](https://badge.fury.io/py/palabra-ai.svg)](https://badge.fury.io/py/palabra-ai)
 <!-- Uncomment when will available:

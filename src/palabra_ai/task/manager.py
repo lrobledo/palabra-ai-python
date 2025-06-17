@@ -13,6 +13,7 @@ from palabra_ai.config import (
     EMPTY_MESSAGE_THRESHOLD,
     MONITOR_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
+    Config,
 )
 from palabra_ai.task.buffer import Buffer
 from palabra_ai.task.realtime import Realtime
@@ -89,6 +90,7 @@ class Stats:
 class Manager(Task):
     """Manages the translation process and monitors progress."""
 
+    cfg: Config
     rt: Realtime
     sender: SenderSourceAudio
     receiver: ReceiverTranslatedAudio

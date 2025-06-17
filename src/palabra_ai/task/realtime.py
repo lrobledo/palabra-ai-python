@@ -9,7 +9,7 @@ from loguru import logger
 
 from palabra_ai.base.enum import Channel, Direction
 from palabra_ai.base.task import Task
-from palabra_ai.config import SLEEP_INTERVAL_LONG
+from palabra_ai.config import SLEEP_INTERVAL_LONG, Config
 from palabra_ai.internal.realtime import PalabraRTClient
 from palabra_ai.util.fanout_queue import FanoutQueue
 from palabra_ai.util.logger import debug, warning
@@ -25,9 +25,9 @@ class RtMsg:
 
 @dataclass
 class Realtime(Task):
+    cfg: Config
     credentials: Any
     _: KW_ONLY
-    log_q: bool = field(default=False)
     c: PalabraRTClient | None = field(default=None, init=False)
     in_foq: FanoutQueue = field(default_factory=FanoutQueue, init=False)
     out_foq: FanoutQueue = field(default_factory=FanoutQueue, init=False)

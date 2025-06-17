@@ -5,14 +5,14 @@ import contextlib
 import os
 import signal
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from aioshutdown import SIGHUP, SIGINT, SIGTERM
 from loguru import logger
 
 from palabra_ai.base.adapter import Reader, Writer
 from palabra_ai.base.task import TaskEvent
-from palabra_ai.config import DEBUG, LOG_FILE, Config
+from palabra_ai.config import Config
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.internal.webrtc import AudioTrackSettings
@@ -32,8 +32,6 @@ class PalabraAI:
     api_key: str | None = None
     api_secret: str | None = None
     api_endpoint: str = "https://api.palabra.ai"
-    debug: bool = field(default=DEBUG)
-    log_file: str | None = field(default=LOG_FILE)
 
     def __post_init__(self):
         self.api_key = self.api_key or os.getenv("PALABRA_API_KEY")
@@ -76,7 +74,7 @@ class PalabraAI:
                 logger.debug("Shutdown complete")
 
     @contextlib.asynccontextmanager
-    async def process(self, config: Config) -> AsyncIterator[Manager]:
+    async def process(self, cfg: Config) -> AsyncIterator[Manager]:
         logger.info("Starting translation process...")
 
         credentials = await PalabraRESTClient(
@@ -85,14 +83,14 @@ class PalabraAI:
             base_url=self.api_endpoint,
         ).create_session()
 
-        if len(config.targets) != SINGLE_TARGET_SUPPORTED_COUNT:
+        if len(cfg.targets) != SINGLE_TARGET_SUPPORTED_COUNT:
             raise ConfigurationError("Only single target language supported")
 
-        reader = config.source._in_pcm
+        reader = cfg.source._in_pcm
         if not isinstance(reader, Reader):
             raise ConfigurationError("src._in_pcm must be Reader")
 
-        target = config.targets[0]
+        target = cfg.targets[0]
         writer = target._out_pcm
         if not isinstance(writer, Writer):
             raise ConfigurationError("target._out_pcm must be Writer")
@@ -115,21 +113,20 @@ class PalabraAI:
                 reader(tg, input_stopper)
                 writer(tg, writer_stopper)
 
-                realtime = Realtime(credentials, log_q=bool(self.log_file))
-                # client = Realtime(credentials, log_q=bool(self.log_file))(tg, input_stopper)
-                if self.log_file:
-                    Logger(realtime, self.log_file, config.to_dict())(
-                        tg, writer_stopper
-                    )
+                realtime = Realtime(cfg, credentials)
+
+                if cfg.log_file:
+                    Logger(cfg, realtime, cfg.to_dict())(tg, writer_stopper)
                 realtime(tg, input_stopper)
 
-                buffer_mgr = Buffer(writer)(tg, writer_stopper)
+                buffer_mgr = Buffer(cfg, writer)(tg, writer_stopper)
 
                 manager = Manager(
-                    realtime, None, None, writer, buffer_mgr, reader, input_stopper
+                    cfg, realtime, None, None, writer, buffer_mgr, reader, input_stopper
                 )(tg, input_stopper)
 
                 receiver = ReceiverTranslatedAudio(
+                    cfg,
                     realtime,
                     buffer_mgr,
                     manager,
@@ -139,9 +136,10 @@ class PalabraAI:
                 )(tg, input_stopper)
 
                 sender = SenderSourceAudio(
+                    cfg,
                     realtime,
                     reader,
-                    config.to_dict(),
+                    cfg.to_dict(),
                     AudioTrackSettings(),
                     manager,
                     receiver,
@@ -152,13 +150,14 @@ class PalabraAI:
                 manager.receiver = receiver
 
                 # Start TranscriptionMessage if any callbacks are configured
-                if config.source._on_transcription or any(
-                    t._on_transcription for t in config.targets
+                if cfg.source._on_transcription or any(
+                    t._on_transcription for t in cfg.targets
                 ):
                     transcription_task = Transcription(
+                        cfg,
                         realtime,
-                        config.source,
-                        config.targets,
+                        cfg.source,
+                        cfg.targets,
                         suppress_callback_errors=os.getenv(
                             "PALABRA_SUPPRESS_CALLBACK_ERRORS", "true"
                         ).lower()

@@ -11,6 +11,7 @@ from palabra_ai.config import (
     SLEEP_INTERVAL_DEFAULT,
     TRACK_RETRY_DELAY,
     TRACK_RETRY_MAX_ATTEMPTS,
+    Config,
 )
 from palabra_ai.task.buffer import Buffer
 from palabra_ai.task.realtime import Realtime
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class ReceiverTranslatedAudio(Task):
+    cfg: Config
     rt: Realtime
     buffer: Buffer
     manager: Manager
