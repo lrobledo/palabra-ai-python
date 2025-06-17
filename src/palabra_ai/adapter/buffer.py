@@ -128,17 +128,18 @@ class BufferWriter(Writer):
 
 class PipeWrapper:
     """Simple wrapper to make pipe work like a buffer"""
+
     def __init__(self, pipe):
         self.pipe = pipe
-        self._buffer = b''
+        self._buffer = b""
         self._pos = 0
 
     def read(self, size=-1):
         if size == -1:
             # Read all remaining
-            data = self._buffer[self._pos:] + self.pipe.read()
-            self._pos = len(self._buffer) + len(data) - len(self._buffer[self._pos:])
-            self._buffer += data[len(self._buffer[self._pos:]):]
+            data = self._buffer[self._pos :] + self.pipe.read()
+            self._pos = len(self._buffer) + len(data) - len(self._buffer[self._pos :])
+            self._buffer += data[len(self._buffer[self._pos :]) :]
             return data
 
         # Read specific size
@@ -148,7 +149,7 @@ class PipeWrapper:
                 break
             self._buffer += chunk
 
-        data = self._buffer[self._pos:self._pos + size]
+        data = self._buffer[self._pos : self._pos + size]
         self._pos += len(data)
         return data
 

@@ -9,6 +9,7 @@ from typing import Any
 
 import palabra_ai
 from palabra_ai.base.task import Task
+from palabra_ai.config import Config
 from palabra_ai.task.realtime import Realtime, RtMsg
 from palabra_ai.util.logger import ALL_LOGS, debug, error
 from palabra_ai.util.orjson import to_json
@@ -18,8 +19,8 @@ from palabra_ai.util.orjson import to_json
 class Logger(Task):
     """Logs all WebSocket and WebRTC messages to files."""
 
+    cfg: Config
     rt: Realtime
-    log_file: str | Path
     config_dict: dict[str, Any]
     _: KW_ONLY
     _txt_file: Any = field(default=None, init=False)
@@ -27,22 +28,21 @@ class Logger(Task):
     _start_ts: float = field(default_factory=time.time, init=False)
     _rt_in_q: asyncio.Queue | None = field(default=None, init=False)
     _rt_out_q: asyncio.Queue | None = field(default=None, init=False)
+    _log_file: Path | str = field(default="", init=False)
 
     def __post_init__(self):
-        self.log_file = (
-            Path(self.log_file) if isinstance(self.log_file, str) else self.log_file
-        )
+        self._log_file = Path(self.cfg.log_file)
         self._rt_in_q = self.rt.in_foq.subscribe("logger", maxsize=0)
         self._rt_out_q = self.rt.out_foq.subscribe("logger", maxsize=0)
         try:
-            self._txt_file = open(self.log_file.with_suffix(".txt"), "a")
+            self._txt_file = open(self._log_file.with_suffix(".txt"), "a")
         except Exception as e:
             error(f"Failed to open log file: {e}")
             raise
 
     async def run(self):
         await self.rt.ready
-        debug(f"Logger started, writing to {self.log_file}")
+        debug(f"Logger started, writing to {self._log_file}")
 
         try:
             async with asyncio.TaskGroup() as tg:
@@ -94,16 +94,16 @@ class Logger(Task):
         if self._txt_file:
             self._txt_file.close()
 
-        if self.log_file:
+        if self._log_file:
             json_data = {
                 "version": palabra_ai.__version__,
                 "messages": self._messages,
                 "start_ts": self._start_ts,
-                "config": self.config_dict,
+                "cfg": self.config_dict,
                 "logs": ALL_LOGS,
             }
 
-            json_path = self.log_file.with_suffix(".json")
+            json_path = self._log_file.with_suffix(".json")
             with open(json_path, "wb") as f:
                 f.write(to_json(json_data))
 

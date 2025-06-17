@@ -8,7 +8,11 @@ from loguru import logger
 
 from palabra_ai.base.adapter import Reader
 from palabra_ai.base.task import Task
-from palabra_ai.config import AUDIO_PROGRESS_LOG_INTERVAL, SAFE_PUBLICATION_END_DELAY
+from palabra_ai.config import (
+    AUDIO_PROGRESS_LOG_INTERVAL,
+    SAFE_PUBLICATION_END_DELAY,
+    Config,
+)
 from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.task.realtime import Realtime
 from palabra_ai.task.receiver import ReceiverTranslatedAudio
@@ -22,6 +26,7 @@ BYTES_PER_SAMPLE = 2  # PCM16 = 2 bytes per sample
 
 @dataclass
 class SenderSourceAudio(Task):
+    cfg: Config
     rt: Realtime
     reader: Reader
     translation_settings: dict[str, Any]

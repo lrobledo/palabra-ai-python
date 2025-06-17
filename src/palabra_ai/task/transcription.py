@@ -9,7 +9,7 @@ from loguru import logger
 
 from palabra_ai.base.message import TranscriptionMessage
 from palabra_ai.base.task import Task
-from palabra_ai.config import SourceLang, TargetLang
+from palabra_ai.config import Config, SourceLang, TargetLang
 from palabra_ai.task.realtime import Realtime
 
 
@@ -17,6 +17,7 @@ from palabra_ai.task.realtime import Realtime
 class Transcription(Task):
     """Processes transcriptions and calls configured callbacks."""
 
+    cfg: Config
     rt: Realtime
     source: SourceLang
     targets: list[TargetLang]

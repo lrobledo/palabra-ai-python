@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated, Any
+from pathlib import Path
+from typing import Annotated, Any, ClassVar
 
 from environs import Env
 from pydantic import (
@@ -306,6 +307,9 @@ class Config(BaseModel):
     preprocessing: Preprocessing = Field(default_factory=Preprocessing)
     translation_queue_configs: QueueConfigs = Field(default_factory=QueueConfigs)
     allowed_message_types: list[str] = [mt.value for mt in Message.ALLOWED_TYPES]
+
+    debug: ClassVar[bool] = DEBUG
+    log_file: ClassVar[Path | str | None] = LOG_FILE
 
     def __init__(
         self, source: SourceLang, targets: list[TargetLang] | TargetLang, **kwargs

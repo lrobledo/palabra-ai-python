@@ -1,6 +1,6 @@
 # Suppress Pydantic deprecation warning in tests
 import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*class-based `config`.*")
+warnings.filterwarnings("ignore", category=DeprecationWarning, message=".*class-based `cfg`.*")
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch

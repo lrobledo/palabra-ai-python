@@ -76,12 +76,10 @@ class PalabraRTClient:
         jwt_token: str,
         control_url: str,
         stream_url: str,
-        log_q: bool = False,
     ):
         self._jwt_token = jwt_token
         self._control_url = control_url
         self._stream_url = stream_url
-        self._log_q = log_q
         self.wsc = WebSocketClient(uri=self._control_url, token=self._jwt_token)
         self.room = RoomClient()
 

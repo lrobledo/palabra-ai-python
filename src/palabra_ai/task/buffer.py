@@ -7,13 +7,14 @@ from loguru import logger
 
 from palabra_ai.base.adapter import Writer
 from palabra_ai.base.task import Task
-from palabra_ai.config import SLEEP_INTERVAL_BUFFER_CHECK
+from palabra_ai.config import SLEEP_INTERVAL_BUFFER_CHECK, Config
 from palabra_ai.internal.buffer import AudioBufferWriter
 from palabra_ai.util.frame_counter import FrameCounter
 
 
 @dataclass
 class Buffer(Task):
+    cfg: Config
     writer: Writer
     _: KW_ONLY
     frame_counter: FrameCounter = field(default_factory=FrameCounter, init=False)
