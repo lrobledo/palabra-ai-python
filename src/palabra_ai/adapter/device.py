@@ -166,7 +166,7 @@ class DeviceReader(Reader):
         default_factory=AudioTrackSettings
     )
     sdm: SoundDeviceManager = field(default_factory=SoundDeviceManager)
-    started: TaskEvent = field(default_factory=asyncio.Event, init=False)
+    started: TaskEvent = field(default_factory=TaskEvent, init=False)
 
     def __post_init__(self):
         self._setup_signal_handlers()
@@ -251,6 +251,8 @@ class DeviceReader(Reader):
 class DeviceWriter(Writer):
     """Write PCM audio to device."""
 
+    device: Device | str
+    _: KW_ONLY
     _buffer_writer: AudioBufferWriter = field(
         default_factory=AudioBufferWriter, init=False
     )
