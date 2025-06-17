@@ -1,6 +1,5 @@
 import logging
 
-# .notextr
 logger = logging.getLogger(__name__)
 
 

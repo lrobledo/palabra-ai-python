@@ -2,8 +2,6 @@ from dataclasses import dataclass, field
 
 from palabra_ai.exc import ConfigurationError
 
-# .notextr
-
 
 @dataclass
 class LanguageRegistry:
