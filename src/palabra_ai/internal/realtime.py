@@ -47,10 +47,7 @@ class RemoteAudioTrack:
             debug(f"Cancelled listening to {self.lang} track")
             raise
         finally:
-            try:
-                await q.put(None)
-            except asyncio.CancelledError:
-                pass
+            q.put_nowait(None)
             debug(f"Closing {self.lang} stream")
             try:
                 await stream.aclose()

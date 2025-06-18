@@ -15,12 +15,11 @@ from palabra_ai.config import (
     SLEEP_INTERVAL_DEFAULT,
     Config,
 )
-from palabra_ai.task.buffer import Buffer
 from palabra_ai.task.realtime import Realtime
 from palabra_ai.task.receiver import ReceiverTranslatedAudio
 from palabra_ai.task.sender import SenderSourceAudio
 from palabra_ai.util.emoji import Emoji
-from palabra_ai.util.logger import debug
+from palabra_ai.util.logger import debug, info
 
 STATS_LOG_INTERVAL = 5.0  # seconds
 
@@ -95,19 +94,19 @@ class Manager(Task):
     sender: SenderSourceAudio
     receiver: ReceiverTranslatedAudio
     writer: Writer
-    buffer_manager: Buffer
     reader: Reader
     input_stopper: TaskEvent
     _: KW_ONLY
     stat: Stats = field(default_factory=Stats, init=False)
     _debug_mode: bool = field(default=True, init=False)
+    _transcriptions_shown: set = field(default_factory=set, init=False)
 
     async def run(self):
         await self._wait_subtasks()
         +self.ready  # noqa
 
         async with asyncio.TaskGroup() as tg:
-            monitor = tg.create_task(self._monitor_loop())
+            monitor = tg.create_task(self.loop())
             eof = tg.create_task(self._check_eof_loop())
 
             await self._wait_for_completion()
@@ -119,7 +118,7 @@ class Manager(Task):
     async def _wait_subtasks(self):
         await asyncio.gather(self.rt.ready, self.sender.ready, self.receiver.ready)
 
-    async def _monitor_loop(self):
+    async def loop(self):
         queue = self.rt.out_foq.subscribe("manager", maxsize=0)
 
         while not self.stopper:
@@ -140,7 +139,10 @@ class Manager(Task):
             match msg.type_:
                 case type_ if type_ in Message.IN_PROCESS_TYPES:
                     self.stat.translation_started = True
-                    debug(repr(msg))
+                    _dedup = msg.dedup
+                    if _dedup not in self._transcriptions_shown:
+                        info(repr(msg))
+                        self._transcriptions_shown.add(_dedup)
 
                 case Message.Type._QUEUE_LEVEL:
                     queue_level = msg.current_queue_level_ms
@@ -181,6 +183,23 @@ class Manager(Task):
     async def _wait_for_completion(self):
         while not self.stat.translation_complete:
             await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+            if any(
+                [
+                    self.input_stopper,
+                    self.sender.stopper,
+                    self.receiver.stopper,
+                    self.writer.stopper,
+                    self.rt.stopper,
+                    self.reader.stopper,
+                    self.stat.translation_complete,
+                    self.stat.reader_eof_received,
+                ]
+            ):
+                debug(
+                    "🏁 One of the input processes has stopped, checking completion..."
+                )
+                break
+        info("🏁 done")
 
     async def _handle_completion(self):
         debug("🎬 Translation complete, stopping input processes...")

@@ -16,6 +16,7 @@ from palabra_ai.config import (
 from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.task.realtime import Realtime
 from palabra_ai.task.receiver import ReceiverTranslatedAudio
+from palabra_ai.util.logger import debug
 
 if TYPE_CHECKING:
     from palabra_ai.task.manager import Manager
@@ -34,31 +35,35 @@ class SenderSourceAudio(Task):
     manager: Manager
     audio_receiver: ReceiverTranslatedAudio
     _: KW_ONLY
-    _publication: Any = field(default=None, init=False)
+    _track: Any = field(default=None, init=False)
     _is_eof: bool = field(default=False, init=False)
 
-    async def run(self):
+    async def boot(self):
         await self.rt.ready
 
-        logger.debug("Creating publication...")
-        self._publication = await self.rt.c.new_translated_publication(
+        self._track = await self.rt.c.new_translated_publication(
             self.translation_settings, self.track_settings
         )
-        logger.debug("Publication created")
-
-        +self.ready  # noqa
-
-        # Wait for receiver to be actually listening before streaming
-        logger.debug("Waiting for ReceiverTranslatedAudio to start listening...")
+        self.reader.sender = self
         await self.audio_receiver.ready
-        logger.debug("ReceiverTranslatedAudio is listening, starting streaming")
 
-        try:
-            await self._stream_loop()
-        finally:
-            if self._publication:
-                await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
-                await self._publication.close()
+    async def do(self):
+        while not self.stopper and not self.reader.eof:
+            chunk = await self.reader.read()
+
+            if chunk is None:
+                debug(f"T{self.name}: Audio EOF reached")
+                +self.stopper  # noqa
+
+            if not chunk:
+                continue
+
+            await self._track.push(chunk)
+
+    async def exit(self):
+        if self._track:
+            await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
+            await asyncio.wait_for(self._track.close(), timeout=5)
 
     async def _stream_loop(self):
         pcm_buffer = bytearray()
@@ -86,7 +91,7 @@ class SenderSourceAudio(Task):
                 fact_chunk_size = len(send_chunk)
 
                 logger.debug(f"Pushing {fact_chunk_size} bytes to publication")
-                await self._publication.push(bytes(send_chunk))
+                await self._track.push(bytes(send_chunk))
                 total_sent += fact_chunk_size
                 self.manager.update_bytes_sent(fact_chunk_size)
 
@@ -96,12 +101,8 @@ class SenderSourceAudio(Task):
         if pcm_buffer and not self.stopper:
             fact_buffer_size = len(pcm_buffer)
             logger.debug(f"Pushing final {fact_buffer_size} bytes to publication")
-            await self._publication.push(bytes(pcm_buffer))
+            await self._track.push(bytes(pcm_buffer))
             total_sent += fact_buffer_size
             self.manager.update_bytes_sent(fact_buffer_size)
 
-        logger.debug(f"Audio streaming complete, sent {total_sent} bytes total")
-
-    @property
-    def is_eof(self) -> bool:
-        return self._is_eof
+        debug(f"Audio streaming complete, sent {total_sent} bytes total")

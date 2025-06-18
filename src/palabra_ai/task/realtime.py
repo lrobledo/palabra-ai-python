@@ -46,7 +46,7 @@ class Realtime(Task):
             try:
                 msg = await asyncio.wait_for(from_q.get(), timeout=SLEEP_INTERVAL_LONG)
                 for to_q in to_qs:
-                    await to_q.publish(RtMsg(ch, dir, msg))
+                    to_q.publish(RtMsg(ch, dir, msg))
                 from_q.task_done()
             except TimeoutError:
                 continue

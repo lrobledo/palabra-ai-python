@@ -1,6 +1,30 @@
+import sys
+from logging import DEBUG, INFO
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+
+def set_logging(debug: bool, log_file: Path):
+    logger.remove()
+    logger.add(
+        sys.stderr,
+        level=DEBUG if debug else INFO,
+        colorize=True,  # Keep default colors
+    )
+    if log_file:
+        logger.add(
+            str((log_file.with_suffix(".log")).absolute()),
+            level=DEBUG,
+            enqueue=True,
+            buffering=1,  # Line buffering for immediate write
+            # Additional options for reliability:
+            catch=True,  # Catch errors in logging itself
+            backtrace=True,  # Full traceback on errors
+            diagnose=True,  # Extra diagnostic info
+        )
+
 
 debug = logger.debug
 info = logger.info

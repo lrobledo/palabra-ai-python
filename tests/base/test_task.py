@@ -68,10 +68,10 @@ class TestTask:
 
     def test_name_property(self):
         task = self.ConcreteTask()
-        assert task.name == "ConcreteTask"
+        assert task.name == "[T]ConcreteTask"
 
         task.name = "CustomName"
-        assert task.name == "CustomName"
+        assert task.name == "[T]CustomName"
 
     def test_task_property_error(self):
         task = self.ConcreteTask()

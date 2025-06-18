@@ -85,15 +85,13 @@ class FileWriter(Writer):
 
     path: Path | str
     delete_on_error: bool = False
+    _: KW_ONLY
 
     def __post_init__(self):
         self.path = Path(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._buffer_writer = AudioBufferWriter()
+        self._buffer_writer = AudioBufferWriter(queue=self.q)
         self._started = False
-
-    def get_queue(self) -> asyncio.Queue:
-        return self._buffer_writer.queue
 
     async def run(self):
         try:

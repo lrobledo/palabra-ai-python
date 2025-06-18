@@ -269,7 +269,7 @@ class RoomClient(rtc.Room):
         # Publish to fanout queue
         logging.debug(f"Received packet: {data}"[:100])
         msg = Message.decode(data.data)
-        asyncio.create_task(self.out_foq.publish(msg))
+        self.out_foq.publish(msg)
 
     def on_track_published(
         self,

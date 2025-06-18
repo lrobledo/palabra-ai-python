@@ -7,6 +7,13 @@ import typing as tp
 
 import sounddevice as sd
 
+from palabra_ai.config import (
+    AUDIO_CHUNK_SECONDS,
+    OUTPUT_DEVICE_BLOCK_SIZE,
+    SAMPLE_RATE_DEFAULT,
+    SAMPLE_RATE_HALF,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +38,8 @@ class InputSoundDevice:
         self.async_callback_fn: tp.Callable[bytes, None] | None = None
         self.callback_task: asyncio.Task | None = None
 
+        # asyncio queue is not thread-safe, so we need to use queue.Queue
+        # because device reader runs in a separate thread
         self.buffer: tp.Queue[bytes] = queue.Queue()
 
     def get_read_delay_ms(self) -> int:
@@ -40,9 +49,9 @@ class InputSoundDevice:
     async def start_reading(
         self,
         async_callback_fn: tp.Callable[[bytes], tp.Awaitable[None]],
-        sample_rate: int = 48000,
+        sample_rate: int = SAMPLE_RATE_DEFAULT,
         channels: int = 2,
-        audio_chunk_seconds: float = 0.5,
+        audio_chunk_seconds: float = AUDIO_CHUNK_SECONDS,
     ) -> None:
         self.sample_rate = sample_rate
         self.channels = channels
@@ -56,23 +65,16 @@ class InputSoundDevice:
         )
         self.device_reading_thread.start()
 
-        try:
-            self.callback_task = asyncio.create_task(self._run_callback_worker())
+        self.callback_task = asyncio.create_task(self._run_callback_worker())
 
-            # Wait for latency to be set
-            while self.stream_latency < 0:
-                await asyncio.sleep(0.01)
-        except asyncio.CancelledError:
-            logger.warning(f"InputSoundDevice {self.name} start_reading cancelled")
-            self.stop_reading(timeout=1)
-            raise
+        logger.info(f"Starting reading device: {self.name}")
 
-        logger.debug(f"Starting reading device: {self.name}")
+        while self.stream_latency < 0:
+            await asyncio.sleep(0.01)
 
-    def stop_reading(self, timeout: int | None = None) -> None:
+    def stop_reading(self, timeout: tp.Optional[int] = None) -> None:
         self.reading_device = False
         self.stream_latency = -1
-
         if (
             self.device_reading_thread is not None
             and self.device_reading_thread.is_alive()
@@ -89,29 +91,17 @@ class InputSoundDevice:
         logger.debug(f"Stopped reading device: {self.name}")
 
     def _push_to_buffer(self, audio_bytes: bytes, *args) -> None:
-        if self.reading_device:
-            self.buffer.put(audio_bytes)
+        self.buffer.put(audio_bytes)
 
     async def _run_callback_worker(self) -> None:
-        try:
-            while self.reading_device:
-                try:
-                    audio_bytes = self.buffer.get_nowait()
-                    await self.async_callback_fn(audio_bytes)
-                except queue.Empty:
-                    try:
-                        await asyncio.sleep(0.1)
-                    except asyncio.CancelledError:
-                        logger.warning(
-                            f"InputSoundDevice {self.name} callback worker cancelled"
-                        )
-                        raise
-                except asyncio.CancelledError:
-                    logger.warning(f"InputSoundDevice {self.name} callback cancelled")
-                    raise
-        except asyncio.CancelledError:
-            logger.warning(f"InputSoundDevice {self.name} callback worker exiting")
-            raise
+        while True:
+            try:
+                audio_bytes = self.buffer.get_nowait()
+                await self.async_callback_fn(audio_bytes)
+            except queue.Empty:
+                await asyncio.sleep(0.1)
+            except asyncio.CancelledError:
+                break
 
     def _read_from_device_to_buffer(self) -> None:
         device_info = self.manager.get_device_info()
@@ -130,8 +120,7 @@ class InputSoundDevice:
                 logger.debug("Started reading device")
                 while self.reading_device:
                     time.sleep(self.audio_chunk_seconds)
-                    if not stream.active:
-                        break
+                    assert stream.active
                     logger.debug("Audio chunk read")
         except Exception:
             logger.exception("Failed to read device with:\n")
@@ -141,7 +130,7 @@ class InputSoundDevice:
 
 
 class OutputSoundDevice:
-    block_size = 1024
+    block_size = OUTPUT_DEVICE_BLOCK_SIZE
 
     def __init__(self, name: str, manager: "SoundDeviceManager"):
         self.name = name
@@ -158,7 +147,9 @@ class OutputSoundDevice:
         self.stream = None
         self.write_buffer: queue.Queue | None = None
 
-    def start_writing(self, channels: int = 1, sample_rate: int = 24000) -> None:
+    def start_writing(
+        self, channels: int = 1, sample_rate: int = SAMPLE_RATE_HALF
+    ) -> None:
         device_info = self.manager.get_device_info()["output_devices"][self.name]
         self.device_ix = device_info["index"]
         self.channels = channels
@@ -185,12 +176,9 @@ class OutputSoundDevice:
         logger.debug(f"Stopped writing to device: {self.name}")
 
     def add_audio_data(self, audio_data: bytes) -> None:
-        if self.stream and self.writing_device:
-            read_size = self.block_size * self.channels * self.stream.samplesize
-            for chunk in batch(audio_data, read_size):
-                if not self.writing_device:
-                    break
-                self.stream.write(chunk)
+        read_size = self.block_size * self.channels * self.stream.samplesize
+        for chunk in batch(audio_data, read_size):
+            self.stream.write(chunk)
 
     def _write_device(self) -> None:
         self.writing_device = True
@@ -243,28 +231,22 @@ class SoundDeviceManager:
         self,
         device_name: str,
         async_callback_fn: tp.Callable[[bytes], tp.Awaitable[None]],
-        sample_rate: int = 48000,
+        sample_rate: int = SAMPLE_RATE_DEFAULT,
         channels: int = 2,
-        audio_chunk_seconds: float = 0.5,
+        audio_chunk_seconds: float = AUDIO_CHUNK_SECONDS,
     ) -> InputSoundDevice:
         device = self.input_device_map.get(device_name)
         if device is None:
             self.input_device_map[device_name] = device = InputSoundDevice(
                 name=device_name, manager=self
             )
-        try:
-            await device.start_reading(
-                async_callback_fn, sample_rate, channels, audio_chunk_seconds
-            )
-        except asyncio.CancelledError:
-            logger.warning(
-                f"SoundDeviceManager start_input_device cancelled for {device_name}"
-            )
-            raise
+        await device.start_reading(
+            async_callback_fn, sample_rate, channels, audio_chunk_seconds
+        )
         return device
 
     def start_output_device(
-        self, device_name: str, channels: int = 1, sample_rate: int = 24000
+        self, device_name: str, channels: int = 1, sample_rate: int = SAMPLE_RATE_HALF
     ) -> OutputSoundDevice:
         device = self.output_device_map.get(device_name)
         if device is None:
@@ -275,12 +257,10 @@ class SoundDeviceManager:
         return device
 
     def stop_input_device(self, device_name: str, timeout: int = 5) -> None:
-        if device_name in self.input_device_map:
-            self.input_device_map[device_name].stop_reading(timeout=timeout)
+        self.input_device_map[device_name].stop_reading(timeout=timeout)
 
     def stop_output_device(self, device_name: str, timeout: int = 5) -> None:
-        if device_name in self.output_device_map:
-            self.output_device_map[device_name].stop_writing(timeout=timeout)
+        self.output_device_map[device_name].stop_writing(timeout=timeout)
 
     def stop_all(self, timeout: int = 5) -> None:
         for device in self.input_device_map.values():

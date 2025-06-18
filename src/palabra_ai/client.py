@@ -16,7 +16,6 @@ from palabra_ai.config import Config
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.internal.webrtc import AudioTrackSettings
-from palabra_ai.task.buffer import Buffer
 from palabra_ai.task.logger import Logger
 from palabra_ai.task.manager import Manager
 from palabra_ai.task.realtime import Realtime
@@ -44,6 +43,7 @@ class PalabraAI:
 
     def run(self, config: Config) -> None:
         async def _run():
+            # asyncio.create_task(_dbg_tasks())
             async with self.process(config) as handle:
                 await handle.task
 
@@ -65,6 +65,13 @@ class PalabraAI:
             finally:
                 signal.signal(signal.SIGINT, old_handler)
         else:
+            try:
+                import uvloop
+
+                asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+            except ImportError:
+                pass
+
             try:
                 with SIGTERM | SIGHUP | SIGINT as shutdown_loop:
                     shutdown_loop.run_until_complete(_run())
@@ -111,6 +118,7 @@ class PalabraAI:
                 logger.debug("Starting processes...")
 
                 reader(tg, input_stopper)
+                writer.reader = reader
                 writer(tg, writer_stopper)
 
                 realtime = Realtime(cfg, credentials)
@@ -119,16 +127,14 @@ class PalabraAI:
                     Logger(cfg, realtime, cfg.to_dict())(tg, writer_stopper)
                 realtime(tg, input_stopper)
 
-                buffer_mgr = Buffer(cfg, writer)(tg, writer_stopper)
-
                 manager = Manager(
-                    cfg, realtime, None, None, writer, buffer_mgr, reader, input_stopper
+                    cfg, realtime, None, None, writer, reader, input_stopper
                 )(tg, input_stopper)
 
                 receiver = ReceiverTranslatedAudio(
                     cfg,
+                    writer,
                     realtime,
-                    buffer_mgr,
                     manager,
                     target.lang.bcp47,
                     reader,
@@ -174,5 +180,5 @@ class PalabraAI:
                 if not isinstance(e, asyncio.CancelledError):
                     logger.error(f"Translation failed: {e}")
             if writer:
-                await writer.cancel()
+                await writer.fail()
             raise

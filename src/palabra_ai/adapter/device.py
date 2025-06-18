@@ -10,18 +10,17 @@ from typing import NamedTuple
 
 from loguru import logger
 
-from palabra_ai.adapter._common import run_until_stopped
 from palabra_ai.base.adapter import Reader, Writer
 from palabra_ai.base.task import TaskEvent
 from palabra_ai.config import (
+    AUDIO_CHUNK_SECONDS,
     CHANNELS_MONO,
     DEVICE_ID_HASH_LENGTH,
-    QUEUE_READ_TIMEOUT,
-    QUEUE_WAIT_TIMEOUT,
+    FINALIZE_WAIT_TIME,
     SAMPLE_RATE_DEFAULT,
+    SLEEP_INTERVAL_DEFAULT,
     THREADPOOL_MAX_WORKERS,
 )
-from palabra_ai.internal.buffer import AudioBufferWriter
 from palabra_ai.internal.device import SoundDeviceManager
 from palabra_ai.internal.webrtc import AudioTrackSettings
 
@@ -161,15 +160,12 @@ class DeviceReader(Reader):
 
     device: Device | str
     _: KW_ONLY
-    q: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=0))
+
     track_settings: AudioTrackSettings | None = field(
         default_factory=AudioTrackSettings
     )
     sdm: SoundDeviceManager = field(default_factory=SoundDeviceManager)
     started: TaskEvent = field(default_factory=TaskEvent, init=False)
-
-    def __post_init__(self):
-        self._setup_signal_handlers()
 
     def _setup_signal_handlers(self):
         try:
@@ -188,13 +184,10 @@ class DeviceReader(Reader):
         self.track_settings = track_settings
 
     async def _audio_callback(self, data: bytes) -> None:
-        try:
-            await self.q.put(data)
-        except asyncio.CancelledError:
-            logger.warning("DeviceReader audio callback cancelled")
-            raise
+        await self.q.put(data)
 
     async def run(self):
+        self._setup_signal_handlers()
         if not self.track_settings:
             self.track_settings = AudioTrackSettings()
 
@@ -208,7 +201,7 @@ class DeviceReader(Reader):
                 channels=CHANNELS_MONO,
                 sample_rate=self.track_settings.sample_rate,
                 async_callback_fn=self._audio_callback,
-                audio_chunk_seconds=self.chunk_size / self.track_settings.sample_rate,
+                audio_chunk_seconds=AUDIO_CHUNK_SECONDS,
             )
             +self.started  # noqa
             logger.debug(f"Started input: {device_name}")
@@ -234,16 +227,13 @@ class DeviceReader(Reader):
                 logger.error(f"Error stopping input device: {e}")
 
     async def read(self, size: int | None = None) -> bytes | None:
-        if not self.started:
-            await self.ready
+        await self.ready
 
         try:
-            chunk = await asyncio.wait_for(self.q.get(), timeout=QUEUE_READ_TIMEOUT)
-            return chunk
-        except TimeoutError:
-            return None
+            return await self.q.get()
         except asyncio.CancelledError:
             logger.warning("DeviceReader read cancelled")
+            +self.eof  # noqa
             raise
 
 
@@ -253,13 +243,10 @@ class DeviceWriter(Writer):
 
     device: Device | str
     _: KW_ONLY
-    _buffer_writer: AudioBufferWriter = field(
-        default_factory=AudioBufferWriter, init=False
-    )
     _sdm: SoundDeviceManager = field(default_factory=SoundDeviceManager, init=False)
     _output_device: object | None = field(default=None, init=False)
     _play_task: asyncio.Task | None = field(default=None, init=False)
-    _started: bool = field(default=False, init=False)
+    _loop: asyncio.AbstractEventLoop | None = field(default=None, init=False)
     _executor: ThreadPoolExecutor = field(
         default_factory=lambda: ThreadPoolExecutor(max_workers=THREADPOOL_MAX_WORKERS),
         init=False,
@@ -269,70 +256,27 @@ class DeviceWriter(Writer):
     def set_track_settings(self, track_settings: AudioTrackSettings) -> None:
         self._track_settings = track_settings
 
-    def get_queue(self) -> asyncio.Queue:
-        return self._buffer_writer.queue
-
-    async def run(self):
+    async def boot(self):
         if not self._track_settings:
             self._track_settings = AudioTrackSettings()
+        device_name = (
+            self.device.name if isinstance(self.device, Device) else self.device
+        )
+        self._output_device = self._sdm.start_output_device(
+            device_name,
+            channels=CHANNELS_MONO,
+            sample_rate=self._track_settings.sample_rate,
+        )
+        self._loop = asyncio.get_running_loop()
+        self._play_task = self._tg.create_task(self._play_audio())
 
-        try:
-            await self._buffer_writer.start()
-            self._started = True
+    async def do(self):
+        while not self.stopper and not self.reader.eof:
+            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+        await asyncio.sleep(FINALIZE_WAIT_TIME)
 
-            device_name = (
-                self.device.name if isinstance(self.device, Device) else self.device
-            )
-
-            self._output_device = self._sdm.start_output_device(
-                device_name,
-                channels=CHANNELS_MONO,
-                sample_rate=self._track_settings.sample_rate,
-            )
-
-            self._play_task = self._tg.create_task(self._play_audio())
-            logger.debug(f"Started output: {device_name}")
-            +self.ready  # noqa
-
-            await run_until_stopped(self)
-
-        except asyncio.CancelledError:
-            logger.warning("DeviceWriter run cancelled")
-            raise
-        finally:
-            await self.finalize()
-
-    async def finalize(self) -> bytes:
-        try:
-            if self._play_task:
-                await self._buffer_writer.queue.put(None)
-                try:
-                    await self._play_task
-                except asyncio.CancelledError:
-                    pass
-
-            await self._stop_device()
-
-            wav_data = self._buffer_writer.to_wav_bytes()
-            if wav_data:
-                logger.debug(f"Generated {len(wav_data)} bytes of WAV data")
-            else:
-                logger.warning("No WAV data generated")
-
-            self._executor.shutdown(wait=True)
-            return wav_data
-        except asyncio.CancelledError:
-            logger.warning("DeviceWriter finalize cancelled")
-            raise
-
-    async def cancel(self) -> None:
-        if self._play_task:
-            self._play_task.cancel()
-            try:
-                await self._play_task
-            except asyncio.CancelledError:
-                pass
-
+    async def exit(self):
+        self.q.put_nowait(None)
         await self._stop_device()
         self._executor.shutdown(wait=False)
 
@@ -347,36 +291,20 @@ class DeviceWriter(Writer):
                 logger.error(f"Error stopping output device: {e}")
 
     async def _play_audio(self) -> None:
-        loop = asyncio.get_running_loop()
-        eof_received = False
-
-        try:
-            while True:
-                try:
-                    audio_frame = await asyncio.wait_for(
-                        self._buffer_writer.queue.get(), timeout=QUEUE_WAIT_TIMEOUT
-                    )
-
-                    if audio_frame is None:
-                        logger.debug("DeviceWriter received EOF marker")
-                        eof_received = True
-                        break
-
-                    audio_bytes = audio_frame.data.tobytes()
-                    await loop.run_in_executor(
-                        self._executor,
-                        partial(self._output_device.add_audio_data, audio_bytes),
-                    )
-                except TimeoutError:
-                    if eof_received and self._buffer_writer.queue.qsize() == 0:
-                        logger.debug("EOF received and queue empty, exiting play loop")
-                        break
-                    continue
-                except asyncio.CancelledError:
-                    logger.warning("DeviceWriter play audio cancelled")
-                    raise
-                except Exception as e:
-                    logger.error(f"Play error: {e}")
-        except asyncio.CancelledError:
-            logger.warning("DeviceWriter play loop exiting due to cancellation")
-            raise
+        while True:
+            try:
+                audio_frame = await self.q.get()
+                if audio_frame is None:
+                    logger.debug("DeviceWriter received EOF marker")
+                    break
+                audio_bytes = audio_frame.data.tobytes()
+                await self._loop.run_in_executor(
+                    self._executor,
+                    partial(self._output_device.add_audio_data, audio_bytes),
+                )
+            except asyncio.CancelledError:
+                logger.warning("DeviceWriter play audio cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Play error: {e}")
+                break

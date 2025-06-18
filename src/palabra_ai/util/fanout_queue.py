@@ -35,28 +35,6 @@ class FanoutQueue:
     def unsubscribe(self, subscriber_id: str) -> None:
         self.subscribers.pop(subscriber_id, None)
 
-    async def publish(self, message: Any) -> dict[str, str]:
-        try:
-            async with self._lock:
-                subscribers = list(self.subscribers.items())
-        except asyncio.CancelledError:
-            logger.warning("FanoutQueue publish cancelled during lock acquisition")
-            raise
-
-        results = {}
-        for sub_id, subscription in subscribers:
-            try:
-                subscription.queue.put_nowait(message)
-                results[sub_id] = "ok"
-            except asyncio.QueueFull:
-                if subscription.fail_on_full:
-                    raise QueueFullError(
-                        f"Queue full for subscriber '{sub_id}' (size: {subscription.queue.maxsize})"
-                    ) from None
-                logger.warning(
-                    f"Dropping message for subscriber '{sub_id}': "
-                    f"queue full (size: {subscription.queue.maxsize})"
-                )
-                results[sub_id] = f"dropped (queue full: {subscription.queue.maxsize})"
-
-        return results
+    def publish(self, message: Any) -> None:
+        for subscription in self.subscribers.values():
+            subscription.queue.put_nowait(message)

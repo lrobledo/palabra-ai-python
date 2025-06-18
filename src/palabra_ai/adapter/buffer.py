@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import io
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import KW_ONLY, dataclass
 
 from loguru import logger
 
@@ -52,16 +52,11 @@ class BufferWriter(Writer):
     """Write PCM audio to io.BytesIO buffer."""
 
     buffer: io.BytesIO
-
     _: KW_ONLY
-    _buffer_writer: AudioBufferWriter = field(
-        default_factory=AudioBufferWriter, init=False
-    )
-    _started: bool = field(default=False, init=False, repr=False)
-    _transfer_task: asyncio.Task | None = field(default=None, init=False, repr=False)
 
-    def get_queue(self) -> asyncio.Queue:
-        return self._buffer_writer.queue
+    def __post_init__(self):
+        self._buffer_writer = AudioBufferWriter(queue=self.q)
+        self._started = False
 
     async def run(self):
         try:

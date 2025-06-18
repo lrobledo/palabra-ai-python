@@ -108,8 +108,8 @@ class WebSocketClient:
                 raw_msg = await self._websocket.recv()
                 debug(f"Received message: {raw_msg}")
                 msg = Message.decode(raw_msg)
-                await self.ws_out_foq.publish(msg)
-                await self.ws_raw_out_foq.publish(self._decode_raw_msg(raw_msg))
+                self.ws_out_foq.publish(msg)
+                self.ws_raw_out_foq.publish(self._decode_raw_msg(raw_msg))
             except asyncio.CancelledError:
                 warning("WebSocketClient _receive_message cancelled")
                 raise
@@ -123,7 +123,7 @@ class WebSocketClient:
 
     async def send(self, message: dict[str, tp.Any]) -> None:
         try:
-            await self.ws_raw_in_foq.publish(message)
+            self.ws_raw_in_foq.publish(message)
         except asyncio.CancelledError:
             warning("WebSocketClient send cancelled")
             raise

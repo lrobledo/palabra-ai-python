@@ -19,6 +19,7 @@ from palabra_ai.base.message import Message
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.lang import Language
 from palabra_ai.types import T_IN_PCM, T_ON_TRANSCRIPTION, T_OUT_PCM
+from palabra_ai.util.logger import set_logging
 
 env = Env(prefix="PALABRA_")
 env.read_env()
@@ -29,12 +30,13 @@ LOG_FILE = env.path("LOG_FILE", default=None)
 # Audio Processing Constants
 CHUNK_SIZE = 16384
 SAMPLE_RATE_DEFAULT = 48000
+SAMPLE_RATE_HALF = 24000
 CHANNELS_MONO = 1
+OUTPUT_DEVICE_BLOCK_SIZE = 1024
+AUDIO_CHUNK_SECONDS = 0.5
 
 # Timing Constants
-# if it will be small, publication stops too early and you can get non-finalized translated audio
 SAFE_PUBLICATION_END_DELAY = 10.0
-
 MONITOR_TIMEOUT = 0.1
 DEFAULT_PROCESS_TIMEOUT = 300.0
 TRACK_WAIT_TIMEOUT = 30.0
@@ -308,7 +310,7 @@ class Config(BaseModel):
     translation_queue_configs: QueueConfigs = Field(default_factory=QueueConfigs)
     allowed_message_types: list[str] = [mt.value for mt in Message.ALLOWED_TYPES]
 
-    log_file: Path | str | None = Field(default=None, exclude=True)
+    log_file: Path | str | None = Field(default=LOG_FILE, exclude=True)
     debug: bool = Field(default=DEBUG, exclude=True)
 
     def __init__(
@@ -321,6 +323,10 @@ class Config(BaseModel):
     def model_post_init(self, context: Any, /) -> None:
         if isinstance(self.targets, TargetLang):
             self.targets = [self.targets]
+        if self.log_file:
+            self.log_file = Path(self.log_file).absolute()
+            self.log_file.parent.mkdir(exist_ok=True, parents=True)
+        set_logging(self.debug, self.log_file)
         super().model_post_init(context)
 
     @model_validator(mode="before")

@@ -322,6 +322,11 @@ class TranscriptionMessage(Message):
     class Config:
         populate_by_name = True
 
+    @property
+    def dedup(self) -> str:
+        """Deduplication key for this message"""
+        return f"{self.id_} {repr(self)}"
+
     @model_validator(mode="before")
     @classmethod
     def extract_from_nested(cls, values: dict[str, Any]) -> dict[str, Any]:

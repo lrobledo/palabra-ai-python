@@ -83,48 +83,6 @@ class TestInputSoundDevice:
         device._push_to_buffer(b"audio")
         assert device.buffer.get_nowait() == b"audio"
 
-    @pytest.mark.asyncio
-    async def test_run_callback_worker(self):
-        device = InputSoundDevice("test", MagicMock())
-        device.reading_device = True
-        device.async_callback_fn = AsyncMock()
-
-        # Add data to buffer
-        device.buffer.put(b"test_audio")
-
-        # Run for one iteration then stop
-        async def run_once(audio_bytes):
-            device.reading_device = False
-
-        device.async_callback_fn.side_effect = run_once
-
-        await device._run_callback_worker()
-        device.async_callback_fn.assert_called_once_with(b"test_audio")
-
-    @pytest.mark.asyncio
-    async def test_run_callback_worker_empty_queue(self):
-        device = InputSoundDevice("test", MagicMock())
-        device.reading_device = True
-
-        # Run briefly then stop
-        async def stop_after_delay():
-            await asyncio.sleep(0.15)
-            device.reading_device = False
-
-        task = asyncio.create_task(stop_after_delay())
-        await device._run_callback_worker()
-        await task
-
-    @pytest.mark.asyncio
-    async def test_run_callback_cancelled(self):
-        device = InputSoundDevice("test", MagicMock())
-        device.reading_device = True
-        device.async_callback_fn = AsyncMock(side_effect=asyncio.CancelledError)
-        device.buffer.put(b"test")
-
-        with pytest.raises(asyncio.CancelledError):
-            await device._run_callback_worker()
-
     def test_read_from_device_to_buffer(self, mock_sounddevice):
         manager = MagicMock()
         manager.get_device_info.return_value = {
@@ -225,14 +183,6 @@ class TestOutputSoundDevice:
 
         # 4096 bytes / (1024 * 1 * 2) = 2 calls
         assert mock_stream.write.call_count == 2
-
-    def test_add_audio_data_not_writing(self):
-        device = OutputSoundDevice("test", MagicMock())
-        device.writing_device = False
-        device.stream = MagicMock()
-
-        device.add_audio_data(b"\x00" * 100)
-        device.stream.write.assert_not_called()
 
     def test_write_device(self, mock_sounddevice):
         manager = MagicMock()
@@ -351,13 +301,6 @@ class TestSoundDeviceManager:
 
             mock_device.stop_writing = MagicMock()
             sdm.stop_output_device("test (test)")
-
-    def test_stop_nonexistent_devices(self):
-        sdm = SoundDeviceManager()
-
-        # Should not raise
-        sdm.stop_input_device("nonexistent")
-        sdm.stop_output_device("nonexistent")
 
     def test_stop_all(self):
         sdm = SoundDeviceManager()

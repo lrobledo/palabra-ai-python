@@ -5,6 +5,8 @@ from dataclasses import KW_ONLY, dataclass, field
 import loguru
 from loguru import logger as l
 
+from palabra_ai.util.logger import debug
+
 
 class TaskEvent(asyncio.Event):
     _owner: str = ""
@@ -64,12 +66,48 @@ class Task(abc.ABC):
         self._task = tg.create_task(self.run(), name=self.name)
         return self
 
-    @abc.abstractmethod
-    async def run(self): ...
+    async def run(self):
+        try:
+            debug(f"{self.name} starting...")
+            await self._boot()
+            +self.ready  # noqa
+            debug(f"{self.name} ready, doing...")
+            await self.do()
+            debug(f"{self.name} done, exiting...")
+            await self.exit()
+            debug(f"{self.name} exited successfully")
+            return
+        except asyncio.CancelledError:
+            debug(f"{self.name} cancelled, exiting...")
+            await self.fail()
+            raise
+        except Exception as e:
+            l.error(f"{self.name} failed with error: {e}")
+            await self.fail()
+            raise
+
+    async def _boot(self):
+        return await self.boot()
+
+    async def boot(self):
+        raise NotImplementedError()
+
+    async def do(self):
+        raise NotImplementedError()
+
+    async def exit(self):
+        raise NotImplementedError()
+
+    async def _exit(self):
+        +self.stopper  # noqa
+        return await self.exit()
+
+    async def fail(self):
+        return await self._exit()
 
     @property
     def name(self) -> str:
-        return self._name or self.__class__.__name__
+        return f"[T]{self._name or self.__class__.__name__}"
 
     @name.setter
     def name(self, value: str) -> None:

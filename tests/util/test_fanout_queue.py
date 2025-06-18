@@ -1,4 +1,6 @@
 import asyncio
+from asyncio import QueueFull
+
 import pytest
 
 from palabra_ai.util.fanout_queue import FanoutQueue, QueueFullError
@@ -14,7 +16,7 @@ class TestFanoutQueue:
         sub2 = fanout.subscribe("sub2", maxsize=10)
 
         # Publish message
-        await fanout.publish("test_message")
+        fanout.publish("test_message")
 
         # Both should receive
         msg1 = await sub1.get()
@@ -34,27 +36,6 @@ class TestFanoutQueue:
         assert "test" not in fanout.subscribers
 
     @pytest.mark.asyncio
-    async def test_publish_to_full_queue_no_fail(self):
-        fanout = FanoutQueue()
-
-        # Create subscriber with small queue, fail_on_full=False (default)
-        sub = fanout.subscribe("test", maxsize=1, fail_on_full=False)
-
-        # Fill the queue
-        await fanout.publish("msg1")
-
-        # This should not block, message will be dropped
-        results = await fanout.publish("msg2")
-        assert results["test"] == "dropped (queue full: 1)"
-
-        # Should only get first message
-        msg = await sub.get()
-        assert msg == "msg1"
-
-        # Queue should be empty now (msg2 was dropped)
-        assert sub.empty()
-
-    @pytest.mark.asyncio
     async def test_publish_to_full_queue_with_fail(self):
         fanout = FanoutQueue()
 
@@ -62,11 +43,11 @@ class TestFanoutQueue:
         sub = fanout.subscribe("test", maxsize=1, fail_on_full=True)
 
         # Fill the queue
-        await fanout.publish("msg1")
+        fanout.publish("msg1")
 
-        # This should raise QueueFullError
-        with pytest.raises(QueueFullError, match="Queue full for subscriber 'test'"):
-            await fanout.publish("msg2")
+        # This should raise QueueFull
+        with pytest.raises(QueueFull):
+            fanout.publish("msg2")
 
     def test_subscribers_property(self):
         fanout = FanoutQueue()
