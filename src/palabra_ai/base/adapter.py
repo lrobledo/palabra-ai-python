@@ -37,3 +37,6 @@ class Writer(Task):
 
     _: KW_ONLY
     q: asyncio.Queue[AudioFrame] = field(default_factory=asyncio.Queue)
+
+    async def _exit(self):
+        return await self.exit()

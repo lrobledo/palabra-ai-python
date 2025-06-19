@@ -48,6 +48,9 @@ class Transcription(Task):
         while not self.stopper:
             try:
                 packet = await asyncio.wait_for(self._webrtc_queue.get(), timeout=0.1)
+                if packet is None:
+                    logger.debug("Received None from WebRTC queue, stopping...")
+                    break
             except TimeoutError:
                 continue
             self._webrtc_queue.task_done()

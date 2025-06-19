@@ -10,6 +10,7 @@ from palabra_ai.base.task import Task
 from palabra_ai.config import SHUTDOWN_TIMEOUT, SLEEP_INTERVAL_LONG, Config
 from palabra_ai.internal.realtime import PalabraRTClient
 from palabra_ai.util.fanout_queue import FanoutQueue
+from palabra_ai.util.logger import debug
 
 
 @dataclass
@@ -45,12 +46,15 @@ class Realtime(Task):
                 for to_q in to_qs:
                     to_q.publish(RtMsg(ch, dir, msg))
                 from_q.task_done()
+                if msg is None:
+                    debug(f"Received None in {ch} {dir}, stopping reroute...")
+                    break
             except TimeoutError:
                 continue
 
     def _reroute_ws_in(self):
         ws_in_q = self.c.wsc.ws_raw_in_foq.subscribe(self, maxsize=0)
-        self.root_tg.create_task(
+        self.sub_tg.create_task(
             self._reroute(
                 Channel.WS, Direction.IN, ws_in_q, [self.in_foq, self.ws_in_foq]
             ),
@@ -59,7 +63,7 @@ class Realtime(Task):
 
     def _reroute_ws_out(self):
         ws_out_q = self.c.wsc.ws_out_foq.subscribe(self, maxsize=0)
-        self.root_tg.create_task(
+        self.sub_tg.create_task(
             self._reroute(
                 Channel.WS, Direction.OUT, ws_out_q, [self.out_foq, self.ws_out_foq]
             ),
@@ -68,7 +72,7 @@ class Realtime(Task):
 
     def _reroute_webrtc_out(self):
         webrtc_out_q = self.c.room.out_foq.subscribe(self, maxsize=0)
-        self.root_tg.create_task(
+        self.sub_tg.create_task(
             self._reroute(
                 Channel.WEBRTC,
                 Direction.OUT,
@@ -94,4 +98,9 @@ class Realtime(Task):
             await asyncio.sleep(SLEEP_INTERVAL_LONG)
 
     async def exit(self):
+        self.in_foq.publish(None)
+        self.out_foq.publish(None)
+        self.ws_in_foq.publish(None)
+        self.ws_out_foq.publish(None)
+        self.webrtc_out_foq.publish(None)
         await asyncio.wait_for(self.c.close(), timeout=SHUTDOWN_TIMEOUT)

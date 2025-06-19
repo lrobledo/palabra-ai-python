@@ -45,8 +45,12 @@ class RtMonitor(Task):
         while not self.stopper:
             try:
                 rt_msg = await asyncio.wait_for(self.q.get(), MONITOR_TIMEOUT)
+                if rt_msg is None:
+                    debug(f"{self.name} received None, stopping...")
+                    break
             except TimeoutError:
                 continue
+
             msg = rt_msg.msg
             debug(f"📨 {self.name} received: {msg}...")
             self.msg_history.append(msg)

@@ -32,10 +32,9 @@ class PalabraAI:
         if not self.api_secret:
             raise ConfigurationError("PALABRA_API_SECRET is not set")
 
-    def run(self, config: Config, stopper: TaskEvent | None = None) -> None:
+    def run(self, cfg: Config, stopper: TaskEvent | None = None) -> None:
         async def _run():
-            # asyncio.create_task(_dbg_tasks())
-            async with self.process(config, stopper) as manager:
+            async with self.process(cfg, stopper) as manager:
                 await manager.task
 
         try:
@@ -75,6 +74,7 @@ class PalabraAI:
     async def process(
         self, cfg: Config, stopper: TaskEvent | None = None
     ) -> AsyncIterator[Manager]:
+
         info("Starting translation process...")
         if stopper is None:
             stopper = TaskEvent()
@@ -91,6 +91,7 @@ class PalabraAI:
                 yield manager
 
             info("Translation completed successfully")
+            return
 
         except* Exception as eg:
             for e in eg.exceptions:
@@ -98,8 +99,4 @@ class PalabraAI:
                     error(f"Translation failed: {e}")
             raise
 
-        # # Create separate stoppers for different groups
-        # input_stopper = TaskEvent()  # For reader, sender, receiver
-        # writer_stopper = TaskEvent()  # For writer only
-        # input_stopper.set_owner("input_stopper")
-        # writer_stopper.set_owner("writer_stopper")
+

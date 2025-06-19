@@ -6,6 +6,8 @@ from dataclasses import KW_ONLY, dataclass, field
 
 import palabra_ai
 from palabra_ai.base.task import Task
+from palabra_ai.config import QUEUE_READ_TIMEOUT
+from palabra_ai.config import SHUTDOWN_TIMEOUT
 from palabra_ai.config import SLEEP_INTERVAL_DEFAULT, Config
 from palabra_ai.task.realtime import Realtime, RtMsg
 from palabra_ai.util.logger import debug
@@ -39,15 +41,20 @@ class Logger(Task):
             self._consume(self._rt_out_q), name="Logger:rt_out"
         )
         debug(f"Logger started, writing to {self.cfg.log_file}")
-        await self.rt.ready
 
     async def do(self):
         # Wait for stopper
         while not self.stopper:
             await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+        debug(f"{self.name} task stopped, exiting...")
 
     async def exit(self):
         debug("Finalizing Logger...")
+        if self._in_task:
+            self._in_task.cancel()
+        if self._out_task:
+            self._out_task.cancel()
+
 
         logs = []
         try:
@@ -81,13 +88,28 @@ class Logger(Task):
         self.rt.in_foq.unsubscribe(self)
         self.rt.out_foq.unsubscribe(self)
 
+        debug(f"{self.name} tasks cancelled, waiting for completion...")
+        await asyncio.gather(asyncio.wait_for(self._in_task, timeout=SHUTDOWN_TIMEOUT),
+        asyncio.wait_for(self._out_task, timeout=SHUTDOWN_TIMEOUT))
+        debug(f"{self.name} tasks completed")
+
+    async def _exit(self):
+        return await self.exit()
+
     async def _consume(self, q: asyncio.Queue):
         """Process WebSocket messages."""
-        try:
-            while True:
-                rt_msg = await q.get()
+        while not self.stopper:
+            try:
+                rt_msg = await asyncio.wait_for(q.get(), timeout=QUEUE_READ_TIMEOUT)
+                if rt_msg is None:
+                    debug(f"Received None from {q}, stopping consumer")
+                    break
                 self._messages.append(rt_msg)
                 q.task_done()
-        except asyncio.CancelledError:
-            debug(f"Consumer for {q} cancelled")
-            raise
+            except asyncio.TimeoutError:
+                continue
+            except asyncio.CancelledError:
+                debug(f"Consumer for {q} cancelled")
+                break
+
+

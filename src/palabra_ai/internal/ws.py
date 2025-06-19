@@ -5,6 +5,7 @@ import typing as tp
 import websockets
 
 from palabra_ai.base.message import Message
+from palabra_ai.config import WS_TIMEOUT
 from palabra_ai.util.fanout_queue import FanoutQueue
 from palabra_ai.util.logger import debug, error, warning
 
@@ -78,7 +79,10 @@ class WebSocketClient:
     async def _send_message(self):
         while self._keep_running and self._websocket and self._websocket.open:
             try:
-                message = await self._raw_in_q.get()
+                try:
+                    message = await asyncio.wait_for(self._raw_in_q.get(), timeout=WS_TIMEOUT)
+                except asyncio.TimeoutError:
+                    continue
                 await self._websocket.send(json.dumps(message))
                 debug(f"Sent message: {message}")
                 self._raw_in_q.task_done()

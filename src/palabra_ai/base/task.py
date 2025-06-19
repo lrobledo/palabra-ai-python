@@ -4,8 +4,10 @@ from dataclasses import KW_ONLY, dataclass, field
 
 import loguru
 
+from palabra_ai.config import SHUTDOWN_TIMEOUT
 from palabra_ai.util.emoji import Emoji
 from palabra_ai.util.logger import debug, error
+from palabra_ai.util.logger import warning
 
 
 class TaskEvent(asyncio.Event):
@@ -74,32 +76,38 @@ class Task(abc.ABC):
 
     async def run(self):
         self._state.append("🚀")
-        try:
-            async with self.sub_tg:
-                debug(f"{self.name} starting...")
+        async with self.sub_tg:
+            try:
+
+                debug(f"{self.name}.run() starting...")
                 self._state.append("🌀")
                 await self._boot()
                 self._state.append("🟢")
                 +self.ready  # noqa
-                debug(f"{self.name} ready, doing...")
+                debug(f"{self.name}.run() ready, doing...")
                 self._state.append("💫")
                 await self.do()
                 self._state.append("🎉")
-                debug(f"{self.name} done, exiting...")
-        except asyncio.CancelledError:
-            self._state.append("🚫")
-            debug(f"{self.name} cancelled, exiting...")
-            raise
-        except Exception as e:
-            self._state.append("💥")
-            error(f"{self.name} failed with error: {e}")
-            raise
-        finally:
-            self._state.append("👋")
-            result = await self._exit()
-            self._state.append("🔴")
-            debug(f"{self.name} exited successfully")
-        return result
+                debug(f"{self.name}.run() done, exiting...")
+                +self.stopper # noqa
+                # self.sub_tg._abort()
+            except asyncio.CancelledError:
+                self._state.append("🚫")
+                debug(f"{self.name}.run() cancelled, exiting...")
+                # raise
+            except Exception as e:
+                self._state.append("💥")
+                error(f"{self.name}.run() failed with error: {e}, exiting...")
+                # raise
+            finally:
+                +self.stopper # noqa
+                self._state.append("👋")
+                debug(f"{self.name}.run() trying to exit...")
+                result = await self._exit()
+                self._state.append("🔴")
+                debug(f"{self.name}.run() exited successfully!")
+                self.sub_tg._abort()
+            return result
 
     async def _boot(self):
         return await self.boot()
@@ -117,8 +125,14 @@ class Task(abc.ABC):
         raise NotImplementedError()
 
     async def _exit(self):
-        +self.stopper  # noqa
-        return await self.exit()
+        try:
+            return await asyncio.wait_for(self.exit(), timeout=SHUTDOWN_TIMEOUT)
+        except asyncio.TimeoutError:
+            error(f"{self.name}.exit() timed out after {SHUTDOWN_TIMEOUT}s")
+            self._task.cancel()
+            warning(f"{self.name}.exit() last chance...")
+            await self._task
+            warning(f"{self.name}.exit() last chance used!")
 
     @property
     def name(self) -> str:
