@@ -100,7 +100,7 @@ class Task(abc.ABC):
             self._state.append("👋")
             debug(f"{self.name}.run() trying to exit...")
             result = await self._exit()
-            self._state.append("🔴")
+            self._state.append("🟠")
             debug(f"{self.name}.run() exited successfully!")
         return result
 
@@ -145,7 +145,7 @@ class Task(abc.ABC):
         if all_tasks:
             done, pending = await asyncio.wait(all_tasks, timeout=1.0)
             for task in pending:
-                warning(f"Force cancelling hung task: {task.get_name()}")
+                debug(f"Force cancelling hung task: {task.get_name()}")
                 task.cancel()
 
     @property

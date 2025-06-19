@@ -96,7 +96,7 @@ class WebSocketClient:
                 debug(f"Sent message: {message}")
                 self._raw_in_q.task_done()
             except asyncio.CancelledError:
-                warning("WebSocketClient _send_message cancelled")
+                debug("WebSocketClient _send_message cancelled")
                 raise
             except websockets.exceptions.WebSocketException as e:
                 if self._keep_running:
@@ -128,7 +128,7 @@ class WebSocketClient:
                 self.ws_out_foq.publish(msg)
                 self.ws_raw_out_foq.publish(self._decode_raw_msg(raw_msg))
             except asyncio.CancelledError:
-                warning("WebSocketClient _receive_message cancelled")
+                debug("WebSocketClient _receive_message cancelled")
                 raise
             except websockets.exceptions.WebSocketException as e:
                 if self._keep_running:

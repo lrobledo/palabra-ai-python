@@ -10,7 +10,7 @@ from palabra_ai.config import (
     SLEEP_INTERVAL_LONG,
 )
 from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
-from palabra_ai.util.logger import debug
+from palabra_ai.util.logger import debug, info
 
 
 @dataclass
@@ -69,3 +69,23 @@ class Stat(Task):
     def stat(self):
         deep = diagnose_hanging_tasks() if self.manager.cfg.deep_debug else ""
         return f"{deep}\n{self.stat_palabra_tasks}\n{self.stat_asyncio_tasks}"
+
+    @property
+    def info(self):
+        states = [t._state[-1] if t._state else "⭕" for t in self.manager.tasks]
+        return "".join(states)
+
+    def show_info(self):
+        info(self.info)
+
+    async def _run_info_banner(self):
+        while True:
+            self.show_info()
+            try:
+                await asyncio.sleep(SLEEP_INTERVAL_LONG)
+            except asyncio.CancelledError:
+                debug("Stat._run_info_banner() cancelled")
+                break
+
+    def run_info_banner(self):
+        return self.sub_tg.create_task(self._run_info_banner(), name="Stat:info_banner")

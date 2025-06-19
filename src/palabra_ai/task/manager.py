@@ -80,7 +80,7 @@ class Manager(Task):
             self.cfg,
             self.writer,
             self.rt,
-            target.lang.code,
+            target.lang,
         )
 
         self.sender = SenderSourceAudio(
@@ -113,6 +113,7 @@ class Manager(Task):
 
         self.stat(self.root_tg)
         await self.stat.ready
+        info_banner = self.stat.run_info_banner()
 
         debug(f"🔧 {self.name} run listening...")
         self.rtmon(self.sub_tg)
@@ -134,6 +135,8 @@ class Manager(Task):
         await self.reader.ready
         debug(f"🔧 {self.name} reader ready!")
 
+        info_banner.cancel()
+
     async def boot(self):
         debug(f"🔧 {self.name}.boot()...")
 
@@ -146,6 +149,8 @@ class Manager(Task):
             ) from e
 
     async def do(self):
+        self.stat.show_info()
+        info("🚀🚀🚀 Starting translation process 🚀🚀🚀")
         while not self.stopper:
             try:
                 await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
@@ -164,6 +169,7 @@ class Manager(Task):
 
     async def exit(self):
         debug(f"🔧 {self.name}.exit() begin")
+        info_banner = self.stat.run_info_banner()
         try:
             await self.writer_mercy()
         except asyncio.CancelledError:
@@ -180,6 +186,8 @@ class Manager(Task):
             # DON'T use _abort() - it's internal!
             # Cancel all subtasks properly
             await self.cancel_all_subtasks()
+            info_banner.cancel()
+            self.stat.show_info()
 
     async def shutdown_task(self, task, timeout=SHUTDOWN_TIMEOUT):
         +task.stopper  # noqa
@@ -187,7 +195,7 @@ class Manager(Task):
         try:
             await asyncio.wait_for(task._task, timeout=timeout)
         except TimeoutError:
-            warning(f"🔧 {self.name}.shutdown_task() {task.name} shutdown timeout!")
+            debug(f"🔧 {self.name}.shutdown_task() {task.name} shutdown timeout!")
             task._task.cancel()
             try:
                 await task._task
@@ -206,40 +214,46 @@ class Manager(Task):
             debug(f"🔧 {self.name}.shutdown_task() {task.name} end.")
 
     async def graceful_exit(self):
-        debug(f"🔧 {self.name}.graceful_exit() starting...")
+        info_banner = self.stat.run_info_banner()
         try:
-            await asyncio.gather(
-                self.shutdown_task(self.reader),
-                self.shutdown_task(self.sender),
-                return_exceptions=True,
-            )
-        except asyncio.CancelledError:
-            debug(
-                f"🔧 {self.name}.graceful_exit() reader and sender shutdown cancelled"
-            )
+            debug(f"🔧 {self.name}.graceful_exit() starting...")
+            try:
+                await asyncio.gather(
+                    self.shutdown_task(self.reader),
+                    self.shutdown_task(self.sender),
+                    return_exceptions=True,
+                )
+            except asyncio.CancelledError:
+                debug(
+                    f"🔧 {self.name}.graceful_exit() reader and sender shutdown cancelled"
+                )
 
-        debug(
-            f"🔧 {self.name}.graceful_exit() waiting {SAFE_PUBLICATION_END_DELAY=}..."
-        )
-        try:
-            await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
-        except asyncio.CancelledError:
-            debug(f"🔧 {self.name}.graceful_exit() sleep cancelled")
-        debug(f"🔧 {self.name}.graceful_exit() {SAFE_PUBLICATION_END_DELAY=} waited!")
-        debug(f"🔧 {self.name}.graceful_exit() gathering... ")
-        try:
-            await asyncio.gather(
-                self.shutdown_task(self.receiver),
-                self.shutdown_task(self.rtmon),
-                self.shutdown_task(self.transcription),
-                self.shutdown_task(self.rt),
-                return_exceptions=True,
-            )
-        except asyncio.CancelledError:
             debug(
-                f"🔧 {self.name}.graceful_exit() receiver, rtmon, transcription and rt shutdown cancelled"
+                f"🔧 {self.name}.graceful_exit() waiting {SAFE_PUBLICATION_END_DELAY=}..."
             )
-        debug(f"🔧 {self.name}.graceful_exit() gathered!")
+            try:
+                await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
+            except asyncio.CancelledError:
+                debug(f"🔧 {self.name}.graceful_exit() sleep cancelled")
+            debug(
+                f"🔧 {self.name}.graceful_exit() {SAFE_PUBLICATION_END_DELAY=} waited!"
+            )
+            debug(f"🔧 {self.name}.graceful_exit() gathering... ")
+            try:
+                await asyncio.gather(
+                    self.shutdown_task(self.receiver),
+                    self.shutdown_task(self.rtmon),
+                    self.shutdown_task(self.transcription),
+                    self.shutdown_task(self.rt),
+                    return_exceptions=True,
+                )
+            except asyncio.CancelledError:
+                debug(
+                    f"🔧 {self.name}.graceful_exit() receiver, rtmon, transcription and rt shutdown cancelled"
+                )
+            debug(f"🔧 {self.name}.graceful_exit() gathered!")
+        finally:
+            info_banner.cancel()
 
     async def writer_mercy(self):
         +self.writer.stopper  # noqa

@@ -91,7 +91,7 @@ class PalabraAI:
     async def process(
         self, cfg: Config, stopper: TaskEvent | None = None
     ) -> AsyncIterator[Manager]:
-        info("Starting translation process...")
+        info("🤖 Connecting to Palabra.ai API...")
         if stopper is None:
             stopper = TaskEvent()
 
@@ -115,5 +115,5 @@ class PalabraAI:
                     error(f"Translation failed: {e}")
             raise
         finally:
-            info("Translation completed")
+            info("🎉🎉🎉 Translation completed 🎉🎉🎉")
             debug(diagnose_hanging_tasks())

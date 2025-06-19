@@ -19,7 +19,7 @@ from palabra_ai.util.logger import debug, error, warning
 class BufferReader(Reader):
     """Read PCM audio from io.BytesIO buffer."""
 
-    buffer: io.BytesIO
+    buffer: io.BytesIO | RunAsPipe
     _: KW_ONLY
 
     def __post_init__(self):
@@ -119,7 +119,7 @@ class BufferWriter(Writer):
             raise
 
 
-class PipeWrapper:
+class RunAsPipe:
     """Universal pipe wrapper for subprocesses with automatic cleanup"""
 
     _active_processes = []
@@ -135,11 +135,11 @@ class PipeWrapper:
         self._closed = False
 
         # Register cleanup only once
-        if not PipeWrapper._cleanup_registered:
-            PipeWrapper._cleanup_registered = True
-            atexit.register(PipeWrapper._cleanup_all)
-            signal.signal(signal.SIGINT, PipeWrapper._signal_handler)
-            signal.signal(signal.SIGTERM, PipeWrapper._signal_handler)
+        if not RunAsPipe._cleanup_registered:
+            RunAsPipe._cleanup_registered = True
+            atexit.register(RunAsPipe._cleanup_all)
+            signal.signal(signal.SIGINT, RunAsPipe._signal_handler)
+            signal.signal(signal.SIGTERM, RunAsPipe._signal_handler)
 
         # Start process immediately
         self._start_process()
@@ -152,7 +152,7 @@ class PipeWrapper:
             stderr=subprocess.DEVNULL,
             preexec_fn=os.setsid if os.name != "nt" else None,
         )
-        PipeWrapper._active_processes.append(self.process)
+        RunAsPipe._active_processes.append(self.process)
 
         # Start background reader thread as daemon
         self._reader_thread = threading.Thread(target=self._read_pipe, daemon=True)
@@ -206,8 +206,8 @@ class PipeWrapper:
             return
 
         self._closed = True
-        if self.process and self.process in PipeWrapper._active_processes:
-            PipeWrapper._active_processes.remove(self.process)
+        if self.process and self.process in RunAsPipe._active_processes:
+            RunAsPipe._active_processes.remove(self.process)
 
             if self.process.poll() is None:
                 self.process.terminate()
@@ -220,18 +220,18 @@ class PipeWrapper:
     @staticmethod
     def _cleanup_all():
         """Clean up all processes"""
-        for proc in list(PipeWrapper._active_processes):
+        for proc in list(RunAsPipe._active_processes):
             if proc.poll() is None:
                 proc.terminate()
                 try:
                     proc.wait(timeout=1)
                 except subprocess.TimeoutExpired:
                     proc.kill()
-        PipeWrapper._active_processes.clear()
+        RunAsPipe._active_processes.clear()
 
     @staticmethod
     def _signal_handler(signum, frame):
         """Handle Ctrl-C"""
-        PipeWrapper._cleanup_all()
+        RunAsPipe._cleanup_all()
         signal.signal(signum, signal.SIG_DFL)
         os.kill(os.getpid(), signum)

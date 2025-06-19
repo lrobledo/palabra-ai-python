@@ -6,7 +6,7 @@ from palabra_ai.adapter import (
     DeviceWriter,
     FileReader,
     FileWriter,
-    PipeWrapper,  # noqa: F401
+    RunAsPipe,
 )  # noqa: F401
 from palabra_ai.client import PalabraAI  # noqa: F401
 from palabra_ai.config import Config, SourceLang, TargetLang  # noqa: F401
@@ -73,6 +73,7 @@ __all__ = [
     "DeviceManager",
     "BufferReader",
     "BufferWriter",
+    "RunAsPipe",
     # Languages
     "AR",
     "AR_AE",
