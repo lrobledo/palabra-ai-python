@@ -1,7 +1,6 @@
 # from __future__ import annotations
 from collections.abc import Awaitable, Callable
-from typing import TypeAlias
-from typing import Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeAlias, Union
 
 from palabra_ai.base.message import TranscriptionMessage
 

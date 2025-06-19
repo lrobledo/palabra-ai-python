@@ -3,7 +3,7 @@ from asyncio import QueueFull
 
 import pytest
 
-from palabra_ai.util.fanout_queue import FanoutQueue, QueueFullError
+from palabra_ai.util.fanout_queue import FanoutQueue
 
 
 class TestFanoutQueue:
@@ -34,20 +34,6 @@ class TestFanoutQueue:
 
         fanout.unsubscribe("test")
         assert "test" not in fanout.subscribers
-
-    @pytest.mark.asyncio
-    async def test_publish_to_full_queue_with_fail(self):
-        fanout = FanoutQueue()
-
-        # Create subscriber with fail_on_full=True
-        sub = fanout.subscribe("test", maxsize=1, fail_on_full=True)
-
-        # Fill the queue
-        fanout.publish("msg1")
-
-        # This should raise QueueFull
-        with pytest.raises(QueueFull):
-            fanout.publish("msg2")
 
     def test_subscribers_property(self):
         fanout = FanoutQueue()

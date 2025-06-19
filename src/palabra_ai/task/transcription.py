@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import builtins
 from collections.abc import Callable
 from dataclasses import KW_ONLY, dataclass, field
 from functools import partial
@@ -11,7 +10,6 @@ from loguru import logger
 from palabra_ai.base.message import TranscriptionMessage
 from palabra_ai.base.task import Task
 from palabra_ai.config import Config
-from palabra_ai.config import SLEEP_INTERVAL_LONG
 from palabra_ai.task.realtime import Realtime
 from palabra_ai.util.capped_set import CappedSet
 
@@ -40,9 +38,7 @@ class Transcription(Task):
                 self._callbacks[target.lang.code] = target.on_transcription
 
     async def boot(self):
-        self._webrtc_queue = self.rt.out_foq.subscribe(
-            self, maxsize=0
-        )
+        self._webrtc_queue = self.rt.out_foq.subscribe(self, maxsize=0)
         await self.rt.ready
         logger.debug(
             f"Transcription processor started for languages: {list(self._callbacks.keys())}"

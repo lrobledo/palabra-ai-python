@@ -130,9 +130,7 @@ class Manager(Task):
         return "\n".join(
             (
                 "\nAsyncio tasks:\n",
-                " | ".join(
-                    sorted([t.get_name() for t in asyncio.all_tasks()])
-                )
+                " | ".join(sorted([t.get_name() for t in asyncio.all_tasks()])),
             )
         )
 
@@ -184,16 +182,16 @@ class Manager(Task):
 
         try:
             await asyncio.wait_for(self.start_tasks(), timeout=BOOT_TIMEOUT)
-        except TimeoutError:
+        except TimeoutError as e:
             raise ConfigurationError(
                 f"Timeout {BOOT_TIMEOUT}s while starting tasks. "
-                "Check your configuration and network connection."
-            )
+                f"Check your configuration and network connection."
+            ) from e
 
     async def do(self):
         while not self.stopper and not self.eof:
             await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
-            if any([t.eof for t in self.tasks]) or any([t.stopper for t in self.tasks]):
+            if any(t.eof for t in self.tasks) or any(t.stopper for t in self.tasks):
                 debug(f"🔚 {self.name} received EOF or stopper, exiting...")
                 info("🏁 done!")
                 +self.stopper  # noqa

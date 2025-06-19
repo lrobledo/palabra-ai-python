@@ -45,23 +45,27 @@ class TestTaskEvent:
 
 class TestTask:
     class ConcreteTask(Task):
-        async def run(self):
-            +self.ready
+        async def boot(self):
+            pass
+
+        async def do(self):
             while not self.stopper:
                 await asyncio.sleep(0.01)
+
+        async def exit(self):
+            pass
 
     @pytest.mark.asyncio
     async def test_task_lifecycle(self):
         task = self.ConcreteTask()
-        stopper = TaskEvent()
 
         async with asyncio.TaskGroup() as tg:
-            task(tg, stopper)
+            task(tg)
             await task.ready
             assert task._task is not None
             assert not task._task.done()
 
-            +stopper
+            +task.stopper
             await asyncio.sleep(0.02)
 
         assert task._task.done()

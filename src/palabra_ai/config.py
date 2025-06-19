@@ -11,10 +11,9 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
+    PrivateAttr,
     model_validator,
 )
-from pydantic import PrivateAttr
-from pydantic import SkipValidation
 
 from palabra_ai.base.message import Message
 from palabra_ai.exc import ConfigurationError
@@ -250,7 +249,6 @@ class SourceLang(BaseModel):
 
     transcription: Transcription = Field(default_factory=Transcription)
 
-
     def __init__(
         self,
         lang: LanguageField,
@@ -278,9 +276,7 @@ class TargetLang(BaseModel):
 
     # TODO: get sync and async callback and run in loop/thread automatically
     _writer: T_WRITER | None = PrivateAttr(default=None)
-    _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(
-        default=None
-    )
+    _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(default=None)
 
     def __init__(
         self,
@@ -305,7 +301,6 @@ class TargetLang(BaseModel):
     @property
     def on_transcription(self) -> T_ON_TRANSCRIPTION | None:
         return self._on_transcription
-
 
 
 class Config(BaseModel):

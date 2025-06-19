@@ -1,9 +1,8 @@
 from collections import deque
 from threading import RLock
-from typing import Generic
-from typing import TypeVar
+from typing import Generic, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class CappedSet(Generic[T]):
@@ -12,7 +11,7 @@ class CappedSet(Generic[T]):
     When capacity is reached, the oldest item is removed to make space for new items.
     """
 
-    __slots__ = ('_capacity', '_data', '_order', '_lock')
+    __slots__ = ("_capacity", "_data", "_order", "_lock")
 
     def __init__(self, capacity: int):
         """Initialize CappedSet with given capacity.

@@ -139,6 +139,4 @@ class Task(abc.ABC):
         stopper = Emoji.bool(self.stopper)
         eof = Emoji.bool(self.eof)
         states = " ".join(self._state) if self._state else "⭕"
-        return (
-            f"{self.name:>28}(ready={ready}, stopper={stopper}, eof={eof}, states={states})"
-        )
+        return f"{self.name:>28}(ready={ready}, stopper={stopper}, eof={eof}, states={states})"
