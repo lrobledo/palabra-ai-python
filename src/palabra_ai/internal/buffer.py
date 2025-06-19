@@ -10,25 +10,27 @@ logger = logging.getLogger(__name__)
 
 
 class AudioBufferWriter:
+
     def __init__(
-        self,
-        queue: asyncio.Queue[rtc.AudioFrame] | None = None,
-        buffer: io.BytesIO | None = None,
-        drop_empty_frames: bool = False,
+            self,
+            tg: asyncio.TaskGroup,
+            queue: asyncio.Queue[rtc.AudioFrame] | None = None,
+            buffer: io.BytesIO | None = None,
+            drop_empty_frames: bool = False,
     ):
         self.buffer = buffer or io.BytesIO()
         self.queue = queue or asyncio.Queue()
+        self.tg = tg
         self.drop_empty_frames = drop_empty_frames
         self._stop_event = asyncio.Event()
         self._task = None
         self._frame_sample: rtc.AudioFrame | None = None
         self._frames_processed = 0
-
     async def start(self):
         logger.debug(f"AudioBufferWriter.start() called, _task={self._task}")
         if self._task is None:
             logger.debug("Creating _write task...")
-            self._task = asyncio.create_task(self._write(), name="Buffer:write")
+            self._task = self.tg.create_task(self._write(), name="Buffer:write")
             logger.debug(f"AudioBufferWriter.start() created task: {self._task}")
             await asyncio.sleep(0.1)
             if self._task.done():

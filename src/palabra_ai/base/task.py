@@ -106,7 +106,8 @@ class Task(abc.ABC):
                 result = await self._exit()
                 self._state.append("🔴")
                 debug(f"{self.name}.run() exited successfully!")
-                self.sub_tg._abort()
+                # self.sub_tg._abort()
+                # self.root_tg._abort()
             return result
 
     async def _boot(self):

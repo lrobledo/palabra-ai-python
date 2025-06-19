@@ -19,10 +19,12 @@ from .ws import WebSocketClient
 class RemoteAudioTrack:
     def __init__(
         self,
+        tg: asyncio.TaskGroup,
         lang: str,
         participant: rtc.RemoteParticipant,
         publication: rtc.RemoteTrackPublication,
     ):
+        self.tg = tg
         self.lang = lang
         self.participant = participant
         self.publication = publication
@@ -30,7 +32,7 @@ class RemoteAudioTrack:
 
     def start_listening(self, q: asyncio.Queue[rtc.AudioFrame]):
         if not self._listen_task:
-            self._listen_task = asyncio.create_task(self.listen(q), name="Rt:listen")
+            self._listen_task = self.tg.create_task(self.listen(q), name="Rt:listen")
 
     async def listen(self, q: asyncio.Queue[rtc.AudioFrame]):
         stream = rtc.AudioStream(self.publication.track)
@@ -70,14 +72,16 @@ class RemoteAudioTrack:
 class PalabraRTClient:
     def __init__(
         self,
+        tg: asyncio.TaskGroup,
         jwt_token: str,
         control_url: str,
         stream_url: str,
     ):
+        self.tg = tg
         self._jwt_token = jwt_token
         self._control_url = control_url
         self._stream_url = stream_url
-        self.wsc = WebSocketClient(uri=self._control_url, token=self._jwt_token)
+        self.wsc = WebSocketClient(tg=tg, uri=self._control_url, token=self._jwt_token)
         self.room = RoomClient()
 
     async def connect(self):
@@ -165,7 +169,7 @@ class PalabraRTClient:
                 publication = await self.room.wait_for_track_publish(
                     participant, _PALABRA_TRANSLATOR_TRACK_NAME_PREFIX + lang
                 )
-                response[lang] = RemoteAudioTrack(lang, participant, publication)
+                response[lang] = RemoteAudioTrack(self.tg, lang, participant, publication)
         except asyncio.CancelledError:
             warning("PalabraRTClient get_translation_tracks cancelled")
             raise

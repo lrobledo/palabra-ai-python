@@ -85,7 +85,7 @@ class Transcription(Task):
         """Call a callback, handling both sync and async callbacks."""
         try:
             if asyncio.iscoroutinefunction(callback):
-                asyncio.create_task(callback(data), name="Transcription:callback")
+                self.sub_tg.create_task(callback(data), name="Transcription:callback")
                 # await callback(data)
             else:
                 # Run sync callback in executor to not block

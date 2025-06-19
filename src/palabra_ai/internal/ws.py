@@ -12,8 +12,9 @@ from palabra_ai.util.logger import debug, error, warning
 
 class WebSocketClient:
     def __init__(
-        self, uri: str, token: str, in_q_size: int = 1024, out_q_size: int = 1024
+        self, tg: asyncio.TaskGroup, uri: str, token: str, in_q_size: int = 1024, out_q_size: int = 1024
     ):
+        self.tg = tg
         self._uri = f"{uri}?token={token}"
         self._websocket = None
         self._keep_running = True
@@ -26,7 +27,7 @@ class WebSocketClient:
         self._task = None
 
     def connect(self):
-        self._task = asyncio.create_task(self.join(), name="Ws:join")
+        self._task = self.tg.create_task(self.join(), name="Ws:join")
 
     async def join(self):
         while self._keep_running:
@@ -34,10 +35,10 @@ class WebSocketClient:
                 async with websockets.connect(self._uri) as websocket:
                     self._websocket = websocket
 
-                    receive_task = asyncio.create_task(
+                    receive_task = self.tg.create_task(
                         self._receive_message(), name="Ws:receive"
                     )
-                    send_task = asyncio.create_task(
+                    send_task = self.tg.create_task(
                         self._send_message(), name="Ws:send"
                     )
 
@@ -52,6 +53,7 @@ class WebSocketClient:
                             await task
                         except asyncio.CancelledError:
                             debug("Task cancelled")
+                            self._keep_running = False
             except asyncio.CancelledError:
                 debug("WebSocketClient join cancelled")
                 self._keep_running = False

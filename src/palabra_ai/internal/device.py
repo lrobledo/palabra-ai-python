@@ -23,7 +23,8 @@ def batch(s: tp.Sequence, n: int = 1) -> tp.Generator:
 
 
 class InputSoundDevice:
-    def __init__(self, name: str, manager: "SoundDeviceManager"):
+    def __init__(self, tg: asyncio.TaskGroup, name: str, manager: "SoundDeviceManager"):
+        self.tg = tg
         self.name = name
         self.manager = manager
 
@@ -65,7 +66,7 @@ class InputSoundDevice:
         )
         self.device_reading_thread.start()
 
-        self.callback_task = asyncio.create_task(
+        self.callback_task = self.tg.create_task(
             self._run_callback_worker(), name="Device:listen"
         )
 
@@ -206,6 +207,9 @@ class OutputSoundDevice:
 
 
 class SoundDeviceManager:
+
+    tg: asyncio.TaskGroup
+
     def __init__(self):
         self.input_device_map: dict[str, InputSoundDevice] = {}
         self.output_device_map: dict[str, OutputSoundDevice] = {}
@@ -239,7 +243,7 @@ class SoundDeviceManager:
     ) -> InputSoundDevice:
         device = self.input_device_map.get(device_name)
         if device is None:
-            self.input_device_map[device_name] = device = InputSoundDevice(
+            self.input_device_map[device_name] = device = InputSoundDevice(self.tg,
                 name=device_name, manager=self
             )
         await device.start_reading(

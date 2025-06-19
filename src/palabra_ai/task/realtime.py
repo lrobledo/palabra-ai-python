@@ -84,6 +84,7 @@ class Realtime(Task):
 
     async def boot(self):
         self.c = PalabraRTClient(
+            self.sub_tg,
             self.credentials.publisher[0],
             self.credentials.control_url,
             self.credentials.stream_url,

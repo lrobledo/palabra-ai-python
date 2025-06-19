@@ -192,6 +192,9 @@ class Manager(Task):
             +self.stat.stopper # noqa
             if self.logger:
                 +self.logger.stopper  # noqa
+            debug(f"🔧 {self.name}.exit() tasks: {[t.name for t in self.tasks]}")
+            self.sub_tg._abort()
+            self.root_tg._abort()
 
     async def shutdown_task(self, task, timeout=SHUTDOWN_TIMEOUT):
         +task.stopper  # noqa

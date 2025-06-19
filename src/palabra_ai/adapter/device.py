@@ -162,6 +162,7 @@ class DeviceReader(Reader):
         default_factory=AudioTrackSettings
     )
     sdm: SoundDeviceManager = field(default_factory=SoundDeviceManager)
+    tg: asyncio.TaskGroup | None = field(default=None, init=False)
 
     def _setup_signal_handlers(self):
         try:
@@ -183,6 +184,7 @@ class DeviceReader(Reader):
         await self.q.put(data)
 
     async def boot(self):
+        self.sdm.tg = self.sub_tg
         self._setup_signal_handlers()
         if not self.track_settings:
             self.track_settings = AudioTrackSettings()
@@ -242,6 +244,7 @@ class DeviceWriter(Writer):
         self._track_settings = track_settings
 
     async def boot(self):
+        self._sdm.tg = self.sub_tg
         if not self._track_settings:
             self._track_settings = AudioTrackSettings()
         device_name = (

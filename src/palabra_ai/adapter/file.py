@@ -96,7 +96,7 @@ class FileWriter(Writer):
     def __post_init__(self):
         self.path = Path(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._buffer_writer = AudioBufferWriter(queue=self.q)
+        self._buffer_writer = AudioBufferWriter(self.sub_tg, queue=self.q)
 
     async def boot(self):
         await self._buffer_writer.start()

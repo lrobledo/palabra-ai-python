@@ -1,3 +1,4 @@
+
 import asyncio
 import traceback
 import sys
@@ -64,13 +65,15 @@ def get_meaningful_frames(stack: List, max_frames: int = 3) -> List[Tuple[str, i
     return frames
 
 
-def diagnose_hanging_tasks(show_all: bool = False) -> None:
+def diagnose_hanging_tasks() -> str:
     """
     Diagnose hanging asyncio tasks from user code
 
-    Args:
-        show_all: If True, show all tasks including system ones
+    Returns:
+        Formatted string with diagnosis results
     """
+    result = []
+
     try:
         # Get current event loop
         loop = asyncio.get_running_loop()
@@ -99,14 +102,29 @@ def diagnose_hanging_tasks(show_all: bool = False) -> None:
             current_frame = stack[-1]
             current_file = current_frame.f_code.co_filename
 
-            # Skip if not user code (unless show_all)
-            if not show_all and not is_user_code(current_file):
-                continue
+            # Get all frames, not just user code
+            frames = []
+            for frame in reversed(stack):
+                filename = frame.f_code.co_filename
+                lineno = frame.f_lineno
+                func_name = frame.f_code.co_name
 
-            # Get meaningful frames
-            frames = get_meaningful_frames(stack)
-            if not frames and not show_all:
-                continue
+                try:
+                    with open(filename, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                        code_line = lines[lineno - 1].strip() if lineno <= len(lines) else None
+                except:
+                    code_line = None
+
+                frames.append((
+                    Path(filename).name,
+                    lineno,
+                    func_name,
+                    code_line
+                ))
+
+                if len(frames) >= 3:  # Limit to 3 frames
+                    break
 
             # Current location info
             location = f"{Path(current_file).name}:{current_frame.f_lineno}"
@@ -129,13 +147,13 @@ def diagnose_hanging_tasks(show_all: bool = False) -> None:
                 state=state
             ))
 
-        # Print diagnosis
+        # Build diagnosis string
         if not hanging_tasks:
-            print("✓ No hanging user tasks found")
-            return
+            result.append("✓ No hanging tasks found")
+            return '\n'.join(result)
 
-        print(f"\n🔍 Found {len(hanging_tasks)} hanging task(s):\n")
-        print("-" * 60)
+        result.append(f"\n🔍 Found {len(hanging_tasks)} hanging task(s):\n")
+        result.append("-" * 60)
 
         # Group by similar locations
         location_groups = defaultdict(list)
@@ -144,28 +162,30 @@ def diagnose_hanging_tasks(show_all: bool = False) -> None:
 
         # Display grouped tasks
         for location, tasks in location_groups.items():
-            print(f"\n📍 {location} ({len(tasks)} task(s))")
+            result.append(f"\n📍 {location} ({len(tasks)} task(s))")
 
             for i, task in enumerate(tasks):
                 prefix = "  └─" if i == len(tasks) - 1 else "  ├─"
-                print(f"{prefix} {task.name} [{task.coro_name}] - {task.state}")
+                result.append(f"{prefix} {task.name} [{task.coro_name}] - {task.state}")
 
                 # Show stack trace for first task in group or if different
                 if i == 0 or task.stack_frames != tasks[0].stack_frames:
                     for j, (file, line, func, code) in enumerate(task.stack_frames):
                         indent = "     " if i == len(tasks) - 1 else "  │  "
                         arrow = "→" if j == 0 else " "
-                        print(f"{indent}  {arrow} {file}:{line} in {func}()")
+                        result.append(f"{indent}  {arrow} {file}:{line} in {func}()")
                         if code:
-                            print(f"{indent}     {code[:50]}{'...' if len(code) > 50 else ''}")
+                            result.append(f"{indent}     {code[:50]}{'...' if len(code) > 50 else ''}")
 
-        print("\n" + "-" * 60)
+        result.append("\n" + "-" * 60)
 
     except RuntimeError:
-        print("❌ No running event loop. Call from within async context.")
+        result.append("❌ No running event loop. Call from within async context.")
+
+    return '\n'.join(result)
 
 
-async def diagnose_hanging_tasks_async(show_all: bool = False) -> List[TaskInfo]:
+async def diagnose_hanging_tasks_async() -> List[TaskInfo]:
     """
     Async version that returns task info as list
 
@@ -193,12 +213,29 @@ async def diagnose_hanging_tasks_async(show_all: bool = False) -> List[TaskInfo]
         current_frame = stack[-1]
         current_file = current_frame.f_code.co_filename
 
-        if not show_all and not is_user_code(current_file):
-            continue
+        # Get all frames
+        frames = []
+        for frame in reversed(stack):
+            filename = frame.f_code.co_filename
+            lineno = frame.f_lineno
+            func_name = frame.f_code.co_name
 
-        frames = get_meaningful_frames(stack)
-        if not frames and not show_all:
-            continue
+            try:
+                with open(filename, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    code_line = lines[lineno - 1].strip() if lineno <= len(lines) else None
+            except:
+                code_line = None
+
+            frames.append((
+                Path(filename).name,
+                lineno,
+                func_name,
+                code_line
+            ))
+
+            if len(frames) >= 3:  # Limit to 3 frames
+                break
 
         location = f"{Path(current_file).name}:{current_frame.f_lineno}"
 
@@ -222,6 +259,49 @@ async def diagnose_hanging_tasks_async(show_all: bool = False) -> List[TaskInfo]
     return hanging_tasks
 
 
+def format_task_info(tasks: List[TaskInfo]) -> str:
+    """
+    Format list of TaskInfo objects into readable string
+
+    Args:
+        tasks: List of TaskInfo objects
+
+    Returns:
+        Formatted string representation
+    """
+    if not tasks:
+        return "✓ No hanging tasks found"
+
+    result = []
+    result.append(f"\n🔍 Found {len(tasks)} hanging task(s):\n")
+    result.append("-" * 60)
+
+    # Group by similar locations
+    location_groups = defaultdict(list)
+    for task_info in tasks:
+        location_groups[task_info.location].append(task_info)
+
+    # Display grouped tasks
+    for location, task_list in location_groups.items():
+        result.append(f"\n📍 {location} ({len(task_list)} task(s))")
+
+        for i, task in enumerate(task_list):
+            prefix = "  └─" if i == len(task_list) - 1 else "  ├─"
+            result.append(f"{prefix} {task.name} [{task.coro_name}] - {task.state}")
+
+            # Show stack trace for first task in group or if different
+            if i == 0 or task.stack_frames != task_list[0].stack_frames:
+                for j, (file, line, func, code) in enumerate(task.stack_frames):
+                    indent = "     " if i == len(task_list) - 1 else "  │  "
+                    arrow = "→" if j == 0 else " "
+                    result.append(f"{indent}  {arrow} {file}:{line} in {func}()")
+                    if code:
+                        result.append(f"{indent}     {code[:50]}{'...' if len(code) > 50 else ''}")
+
+    result.append("\n" + "-" * 60)
+    return '\n'.join(result)
+
+
 # Example usage and test
 if __name__ == "__main__":
     async def hanging_task():
@@ -242,9 +322,10 @@ if __name__ == "__main__":
         # Wait a bit
         await asyncio.sleep(0.1)
 
-        # Run diagnostics
+        # Run diagnostics and print result
         print("Running diagnostics...")
-        diagnose_hanging_tasks()
+        diagnosis = diagnose_hanging_tasks()
+        print(diagnosis)
 
         # Cancel tasks
         task1.cancel()
@@ -263,16 +344,13 @@ async def monitor_tasks_periodically():
     """Monitor tasks every N seconds"""
     while True:
         try:
-            await asyncio.sleep(10)  # Check every 5 seconds
+            await asyncio.sleep(10)  # Check every 10 seconds
 
-            print("\n⏰ Periodic check:")
-            diagnose_hanging_tasks()
+            diagnosis = diagnose_hanging_tasks()
+            print(f"\n⏰ Periodic check:{diagnosis}")
         except asyncio.CancelledError:
             print("🛑 Monitor task cancelled, stopping periodic checks.")
+            break
+        except Exception as e:
+            print(f"❌ Error during monitoring: {e}")
             continue
-
-async def main():
-
-    # Start monitoring
-    monitor_task = asyncio.create_task(monitor_tasks_periodically(), name="Monitor")
-

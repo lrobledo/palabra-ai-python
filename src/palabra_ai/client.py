@@ -14,6 +14,7 @@ from palabra_ai.config import Config
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
+from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
 from palabra_ai.util.logger import debug, error, info
 
 
@@ -32,10 +33,16 @@ class PalabraAI:
         if not self.api_secret:
             raise ConfigurationError("PALABRA_API_SECRET is not set")
 
-    def run(self, cfg: Config, stopper: TaskEvent | None = None) -> None:
+    def run(self, cfg: Config, stopper: TaskEvent | None = None) -> AsyncIterator[Manager]:
         async def _run():
+            # async with asyncio.TaskGroup() as root_tg:
             async with self.process(cfg, stopper) as manager:
-                await manager.task
+                debug(diagnose_hanging_tasks())
+                result = await manager.task
+                debug(diagnose_hanging_tasks())
+            debug(diagnose_hanging_tasks())
+            return result
+
 
         try:
             loop = asyncio.get_running_loop()
@@ -46,7 +53,8 @@ class PalabraAI:
             task = loop.create_task(_run(), name="PalabraAI")
 
             def handle_interrupt(sig, frame):
-                task.cancel()
+                # task.cancel()
+                +stopper # noqa
                 raise KeyboardInterrupt()
 
             old_handler = signal.signal(signal.SIGINT, handle_interrupt)
@@ -67,8 +75,13 @@ class PalabraAI:
                     shutdown_loop.run_until_complete(_run())
             except KeyboardInterrupt:
                 debug("Received keyboard interrupt (Ctrl+C)")
+                return
+            except Exception as e:
+                error(f"An error occurred during execution: {e}")
+                raise
             finally:
                 debug("Shutdown complete")
+                return
 
     @contextlib.asynccontextmanager
     async def process(
@@ -91,6 +104,7 @@ class PalabraAI:
                 yield manager
 
             info("Translation completed successfully")
+            debug(diagnose_hanging_tasks())
             return
 
         except* Exception as eg:

@@ -10,6 +10,7 @@ from palabra_ai.config import SAFE_PUBLICATION_END_DELAY
 from palabra_ai.config import SHUTDOWN_TIMEOUT
 from palabra_ai.config import SLEEP_INTERVAL_DEFAULT
 from palabra_ai.config import SLEEP_INTERVAL_LONG
+from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
 from palabra_ai.util.logger import debug
 
 
@@ -66,4 +67,4 @@ class Stat(Task):
 
     @property
     def stat(self):
-        return f"{self.stat_palabra_tasks}\n{self.stat_asyncio_tasks}"
+        return f"{self.stat_palabra_tasks}\n{self.stat_asyncio_tasks}\n\n{diagnose_hanging_tasks()}"

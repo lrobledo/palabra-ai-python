@@ -60,7 +60,7 @@ class BufferWriter(Writer):
     _: KW_ONLY
 
     def __post_init__(self):
-        self._buffer_writer = AudioBufferWriter(queue=self.q)
+        self._buffer_writer = AudioBufferWriter(self.sub_tg, queue=self.q)
         self._started = False
 
     async def boot(self):
