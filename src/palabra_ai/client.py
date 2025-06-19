@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from aioshutdown import SIGHUP, SIGINT, SIGTERM
 
 from palabra_ai.base.task import TaskEvent
-from palabra_ai.config import Config
+from palabra_ai.config import DEEP_DEBUG, Config
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
@@ -33,16 +33,21 @@ class PalabraAI:
         if not self.api_secret:
             raise ConfigurationError("PALABRA_API_SECRET is not set")
 
-    def run(self, cfg: Config, stopper: TaskEvent | None = None) -> AsyncIterator[Manager]:
+    def run(self, cfg: Config, stopper: TaskEvent | None = None) -> None:
         async def _run():
-            # async with asyncio.TaskGroup() as root_tg:
-            async with self.process(cfg, stopper) as manager:
-                debug(diagnose_hanging_tasks())
-                result = await manager.task
-                debug(diagnose_hanging_tasks())
-            debug(diagnose_hanging_tasks())
-            return result
-
+            try:
+                async with self.process(cfg, stopper) as manager:
+                    if DEEP_DEBUG:
+                        debug(diagnose_hanging_tasks())
+                    await manager.task
+                    if DEEP_DEBUG:
+                        debug(diagnose_hanging_tasks())
+            except BaseException as e:
+                error(f"Error in PalabraAI.run(): {e}")
+                raise
+            finally:
+                if DEEP_DEBUG:
+                    debug(diagnose_hanging_tasks())
 
         try:
             loop = asyncio.get_running_loop()
@@ -54,7 +59,7 @@ class PalabraAI:
 
             def handle_interrupt(sig, frame):
                 # task.cancel()
-                +stopper # noqa
+                +stopper  # noqa
                 raise KeyboardInterrupt()
 
             old_handler = signal.signal(signal.SIGINT, handle_interrupt)
@@ -81,13 +86,11 @@ class PalabraAI:
                 raise
             finally:
                 debug("Shutdown complete")
-                return
 
     @contextlib.asynccontextmanager
     async def process(
         self, cfg: Config, stopper: TaskEvent | None = None
     ) -> AsyncIterator[Manager]:
-
         info("Starting translation process...")
         if stopper is None:
             stopper = TaskEvent()
@@ -98,19 +101,19 @@ class PalabraAI:
             base_url=self.api_endpoint,
         ).create_session()
 
+        manager = None
         try:
             async with asyncio.TaskGroup() as tg:
                 manager = Manager(cfg, credentials, stopper=stopper)(tg)
                 yield manager
 
-            info("Translation completed successfully")
-            debug(diagnose_hanging_tasks())
-            return
-
+        except* asyncio.CancelledError:
+            debug("TaskGroup received CancelledError")
         except* Exception as eg:
             for e in eg.exceptions:
                 if not isinstance(e, asyncio.CancelledError):
                     error(f"Translation failed: {e}")
             raise
-
-
+        finally:
+            info("Translation completed")
+            debug(diagnose_hanging_tasks())

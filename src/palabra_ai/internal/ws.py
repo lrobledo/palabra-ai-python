@@ -12,7 +12,12 @@ from palabra_ai.util.logger import debug, error, warning
 
 class WebSocketClient:
     def __init__(
-        self, tg: asyncio.TaskGroup, uri: str, token: str, in_q_size: int = 1024, out_q_size: int = 1024
+        self,
+        tg: asyncio.TaskGroup,
+        uri: str,
+        token: str,
+        in_q_size: int = 1024,
+        out_q_size: int = 1024,
     ):
         self.tg = tg
         self._uri = f"{uri}?token={token}"
@@ -82,8 +87,10 @@ class WebSocketClient:
         while self._keep_running and self._websocket and self._websocket.open:
             try:
                 try:
-                    message = await asyncio.wait_for(self._raw_in_q.get(), timeout=WS_TIMEOUT)
-                except asyncio.TimeoutError:
+                    message = await asyncio.wait_for(
+                        self._raw_in_q.get(), timeout=WS_TIMEOUT
+                    )
+                except TimeoutError:
                     continue
                 await self._websocket.send(json.dumps(message))
                 debug(f"Sent message: {message}")
@@ -132,6 +139,9 @@ class WebSocketClient:
                 break
 
     async def send(self, message: dict[str, tp.Any]) -> None:
+        if not self._keep_running:
+            warning("WebSocketClient send called after shutdown")
+            return
         try:
             self.ws_raw_in_foq.publish(message)
         except asyncio.CancelledError:
@@ -182,9 +192,6 @@ class WebSocketClient:
                 await self._websocket.close()
             except asyncio.CancelledError:
                 warning("WebSocketClient websocket close cancelled")
-                try:
-                    await asyncio.wait_for(self._websocket.close(), timeout=1.0)
-                except (TimeoutError, asyncio.CancelledError):
-                    error("WebSocketClient websocket force close failed")
+                # Don't retry on cancel
             except Exception as e:
                 error(f"Error closing websocket: {e}")

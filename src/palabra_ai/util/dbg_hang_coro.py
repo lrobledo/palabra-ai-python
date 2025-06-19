@@ -1,20 +1,18 @@
-
 import asyncio
-import traceback
-import sys
-from pathlib import Path
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from pathlib import Path
+from typing import Optional
 
 
 @dataclass
 class TaskInfo:
     """Information about a hanging task"""
+
     name: str
     coro_name: str
     location: str
-    stack_frames: List[Tuple[str, int, str, Optional[str]]]
+    stack_frames: list[tuple[str, int, str, Optional[str]]]
     state: str
 
 
@@ -25,16 +23,25 @@ def is_user_code(filename: str) -> bool:
 
     # Skip standard library and common async libraries
     skip_patterns = [
-        'asyncio/', 'concurrent/', 'threading.py',
-        'selectors.py', 'socket.py', 'ssl.py',
-        'site-packages/', 'dist-packages/',
-        '<frozen', '<built-in>', '<string>'
+        "asyncio/",
+        "concurrent/",
+        "threading.py",
+        "selectors.py",
+        "socket.py",
+        "ssl.py",
+        "site-packages/",
+        "dist-packages/",
+        "<frozen",
+        "<built-in>",
+        "<string>",
     ]
 
     return not any(pattern in filename for pattern in skip_patterns)
 
 
-def get_meaningful_frames(stack: List, max_frames: int = 3) -> List[Tuple[str, int, str, Optional[str]]]:
+def get_meaningful_frames(
+    stack: list, max_frames: int = 3
+) -> list[tuple[str, int, str, Optional[str]]]:
     """Extract only meaningful frames from stack trace"""
     frames = []
 
@@ -46,18 +53,22 @@ def get_meaningful_frames(stack: List, max_frames: int = 3) -> List[Tuple[str, i
             func_name = frame.f_code.co_name
 
             try:
-                with open(filename, 'r', encoding='utf-8') as f:
+                with open(filename, encoding="utf-8") as f:
                     lines = f.readlines()
-                    code_line = lines[lineno - 1].strip() if lineno <= len(lines) else None
-            except:
+                    code_line = (
+                        lines[lineno - 1].strip() if lineno <= len(lines) else None
+                    )
+            except Exception:
                 code_line = None
 
-            frames.append((
-                Path(filename).name,  # Just filename, not full path
-                lineno,
-                func_name,
-                code_line
-            ))
+            frames.append(
+                (
+                    Path(filename).name,  # Just filename, not full path
+                    lineno,
+                    func_name,
+                    code_line,
+                )
+            )
 
             if len(frames) >= max_frames:
                 break
@@ -91,7 +102,7 @@ def diagnose_hanging_tasks() -> str:
             # Get task info
             coro = task.get_coro()
             task_name = task.get_name()
-            coro_name = coro.__name__ if hasattr(coro, '__name__') else str(coro)
+            coro_name = coro.__name__ if hasattr(coro, "__name__") else str(coro)
 
             # Get stack
             stack = task.get_stack()
@@ -110,18 +121,15 @@ def diagnose_hanging_tasks() -> str:
                 func_name = frame.f_code.co_name
 
                 try:
-                    with open(filename, 'r', encoding='utf-8') as f:
+                    with open(filename, encoding="utf-8") as f:
                         lines = f.readlines()
-                        code_line = lines[lineno - 1].strip() if lineno <= len(lines) else None
-                except:
+                        code_line = (
+                            lines[lineno - 1].strip() if lineno <= len(lines) else None
+                        )
+                except Exception:
                     code_line = None
 
-                frames.append((
-                    Path(filename).name,
-                    lineno,
-                    func_name,
-                    code_line
-                ))
+                frames.append((Path(filename).name, lineno, func_name, code_line))
 
                 if len(frames) >= 3:  # Limit to 3 frames
                     break
@@ -139,18 +147,20 @@ def diagnose_hanging_tasks() -> str:
             else:
                 state = "RUNNING"
 
-            hanging_tasks.append(TaskInfo(
-                name=task_name,
-                coro_name=coro_name,
-                location=location,
-                stack_frames=frames,
-                state=state
-            ))
+            hanging_tasks.append(
+                TaskInfo(
+                    name=task_name,
+                    coro_name=coro_name,
+                    location=location,
+                    stack_frames=frames,
+                    state=state,
+                )
+            )
 
         # Build diagnosis string
         if not hanging_tasks:
             result.append("✓ No hanging tasks found")
-            return '\n'.join(result)
+            return "\n".join(result)
 
         result.append(f"\n🔍 Found {len(hanging_tasks)} hanging task(s):\n")
         result.append("-" * 60)
@@ -175,17 +185,19 @@ def diagnose_hanging_tasks() -> str:
                         arrow = "→" if j == 0 else " "
                         result.append(f"{indent}  {arrow} {file}:{line} in {func}()")
                         if code:
-                            result.append(f"{indent}     {code[:50]}{'...' if len(code) > 50 else ''}")
+                            result.append(
+                                f"{indent}     {code[:50]}{'...' if len(code) > 50 else ''}"
+                            )
 
         result.append("\n" + "-" * 60)
 
     except RuntimeError:
         result.append("❌ No running event loop. Call from within async context.")
 
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
-async def diagnose_hanging_tasks_async() -> List[TaskInfo]:
+async def diagnose_hanging_tasks_async() -> list[TaskInfo]:
     """
     Async version that returns task info as list
 
@@ -204,7 +216,7 @@ async def diagnose_hanging_tasks_async() -> List[TaskInfo]:
 
         coro = task.get_coro()
         task_name = task.get_name()
-        coro_name = coro.__name__ if hasattr(coro, '__name__') else str(coro)
+        coro_name = coro.__name__ if hasattr(coro, "__name__") else str(coro)
 
         stack = task.get_stack()
         if not stack:
@@ -221,18 +233,15 @@ async def diagnose_hanging_tasks_async() -> List[TaskInfo]:
             func_name = frame.f_code.co_name
 
             try:
-                with open(filename, 'r', encoding='utf-8') as f:
+                with open(filename, encoding="utf-8") as f:
                     lines = f.readlines()
-                    code_line = lines[lineno - 1].strip() if lineno <= len(lines) else None
-            except:
+                    code_line = (
+                        lines[lineno - 1].strip() if lineno <= len(lines) else None
+                    )
+            except Exception:
                 code_line = None
 
-            frames.append((
-                Path(filename).name,
-                lineno,
-                func_name,
-                code_line
-            ))
+            frames.append((Path(filename).name, lineno, func_name, code_line))
 
             if len(frames) >= 3:  # Limit to 3 frames
                 break
@@ -248,18 +257,20 @@ async def diagnose_hanging_tasks_async() -> List[TaskInfo]:
         else:
             state = "RUNNING"
 
-        hanging_tasks.append(TaskInfo(
-            name=task_name,
-            coro_name=coro_name,
-            location=location,
-            stack_frames=frames,
-            state=state
-        ))
+        hanging_tasks.append(
+            TaskInfo(
+                name=task_name,
+                coro_name=coro_name,
+                location=location,
+                stack_frames=frames,
+                state=state,
+            )
+        )
 
     return hanging_tasks
 
 
-def format_task_info(tasks: List[TaskInfo]) -> str:
+def format_task_info(tasks: list[TaskInfo]) -> str:
     """
     Format list of TaskInfo objects into readable string
 
@@ -296,14 +307,17 @@ def format_task_info(tasks: List[TaskInfo]) -> str:
                     arrow = "→" if j == 0 else " "
                     result.append(f"{indent}  {arrow} {file}:{line} in {func}()")
                     if code:
-                        result.append(f"{indent}     {code[:50]}{'...' if len(code) > 50 else ''}")
+                        result.append(
+                            f"{indent}     {code[:50]}{'...' if len(code) > 50 else ''}"
+                        )
 
     result.append("\n" + "-" * 60)
-    return '\n'.join(result)
+    return "\n".join(result)
 
 
 # Example usage and test
 if __name__ == "__main__":
+
     async def hanging_task():
         """Example of hanging task"""
         while True:
@@ -311,8 +325,8 @@ if __name__ == "__main__":
 
     async def io_waiting_task():
         """Task waiting for I/O"""
-        reader, writer = await asyncio.open_connection('example.com', 80)
-        data = await reader.read(1024)
+        reader, writer = await asyncio.open_connection("example.com", 80)
+        data = await reader.read(1024)  # noqa
 
     async def main():
         # Create some hanging tasks

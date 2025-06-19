@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import io
+import os
+import signal
+import subprocess
+import threading
 from dataclasses import KW_ONLY, dataclass
 
 from palabra_ai.base.adapter import Reader, Writer
@@ -115,40 +120,118 @@ class BufferWriter(Writer):
 
 
 class PipeWrapper:
-    """Simple wrapper to make pipe work like a buffer"""
+    """Universal pipe wrapper for subprocesses with automatic cleanup"""
 
-    def __init__(self, pipe):
-        self.pipe = pipe
-        self._buffer = b""
+    _active_processes = []
+    _cleanup_registered = False
+
+    def __init__(self, cmd):
+        self.cmd = cmd
+        self.process = None
+        self._buffer = bytearray()
         self._pos = 0
+        self._reader_thread = None
+        self._lock = threading.Lock()
+        self._closed = False
+
+        # Register cleanup only once
+        if not PipeWrapper._cleanup_registered:
+            PipeWrapper._cleanup_registered = True
+            atexit.register(PipeWrapper._cleanup_all)
+            signal.signal(signal.SIGINT, PipeWrapper._signal_handler)
+            signal.signal(signal.SIGTERM, PipeWrapper._signal_handler)
+
+        # Start process immediately
+        self._start_process()
+
+    def _start_process(self):
+        """Start subprocess and reader thread"""
+        self.process = subprocess.Popen(
+            self.cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            preexec_fn=os.setsid if os.name != "nt" else None,
+        )
+        PipeWrapper._active_processes.append(self.process)
+
+        # Start background reader thread as daemon
+        self._reader_thread = threading.Thread(target=self._read_pipe, daemon=True)
+        self._reader_thread.start()
+
+    def _read_pipe(self):
+        """Background thread to read from pipe"""
+        try:
+            while not self._closed and self.process.poll() is None:
+                chunk = self.process.stdout.read(4096)
+                if not chunk:
+                    break
+                with self._lock:
+                    self._buffer.extend(chunk)
+        except Exception:
+            pass
 
     def read(self, size=-1):
-        if size == -1:
-            # Read all remaining
-            data = self._buffer[self._pos :] + self.pipe.read()
-            self._pos = len(self._buffer) + len(data) - len(self._buffer[self._pos :])
-            self._buffer += data[len(self._buffer[self._pos :]) :]
+        """Read from buffer (compatible with io.BytesIO)"""
+        with self._lock:
+            if size == -1:
+                data = bytes(self._buffer[self._pos :])
+                self._pos = len(self._buffer)
+            else:
+                data = bytes(self._buffer[self._pos : self._pos + size])
+                self._pos += len(data)
             return data
 
-        # Read specific size
-        while len(self._buffer) - self._pos < size:
-            chunk = self.pipe.read(size - (len(self._buffer) - self._pos))
-            if not chunk:
-                break
-            self._buffer += chunk
-
-        data = self._buffer[self._pos : self._pos + size]
-        self._pos += len(data)
-        return data
+    def seek(self, pos, whence=0):
+        """Seek in buffer"""
+        with self._lock:
+            if whence == 0:  # SEEK_SET
+                self._pos = min(pos, len(self._buffer))
+            elif whence == 1:  # SEEK_CUR
+                self._pos = min(self._pos + pos, len(self._buffer))
+            elif whence == 2:  # SEEK_END
+                self._pos = len(self._buffer) + pos
+            return self._pos
 
     def tell(self):
+        """Current position"""
         return self._pos
 
-    def seek(self, pos, whence=0):
-        if whence == 0:  # SEEK_SET
-            self._pos = min(pos, len(self._buffer))
-        elif whence == 1:  # SEEK_CUR
-            self._pos = min(self._pos + pos, len(self._buffer))
-        elif whence == 2:  # SEEK_END
-            self._pos = len(self._buffer) + pos
-        return self._pos
+    def __del__(self):
+        """Cleanup on garbage collection"""
+        self._cleanup()
+
+    def _cleanup(self):
+        """Clean up process"""
+        if self._closed:
+            return
+
+        self._closed = True
+        if self.process and self.process in PipeWrapper._active_processes:
+            PipeWrapper._active_processes.remove(self.process)
+
+            if self.process.poll() is None:
+                self.process.terminate()
+                try:
+                    self.process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    self.process.kill()
+                    self.process.wait()
+
+    @staticmethod
+    def _cleanup_all():
+        """Clean up all processes"""
+        for proc in list(PipeWrapper._active_processes):
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+        PipeWrapper._active_processes.clear()
+
+    @staticmethod
+    def _signal_handler(signum, frame):
+        """Handle Ctrl-C"""
+        PipeWrapper._cleanup_all()
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)

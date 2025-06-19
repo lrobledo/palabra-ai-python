@@ -1,15 +1,14 @@
 import asyncio
 import time
-from dataclasses import dataclass
-from dataclasses import field
-from dataclasses import KW_ONLY
+from dataclasses import KW_ONLY, dataclass
 
 from palabra_ai.base.task import Task
-from palabra_ai.config import LOGGER_SHUTDOWN_TIMEOUT
-from palabra_ai.config import SAFE_PUBLICATION_END_DELAY
-from palabra_ai.config import SHUTDOWN_TIMEOUT
-from palabra_ai.config import SLEEP_INTERVAL_DEFAULT
-from palabra_ai.config import SLEEP_INTERVAL_LONG
+from palabra_ai.config import (
+    DEEP_DEBUG,
+    SHUTDOWN_TIMEOUT,
+    SLEEP_INTERVAL_DEFAULT,
+    SLEEP_INTERVAL_LONG,
+)
 from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
 from palabra_ai.util.logger import debug
 
@@ -23,11 +22,12 @@ class Stat(Task):
         pass
 
     async def do(self):
+        show_every = 30 if DEEP_DEBUG else 150
         i = 0
         last_state = ""
         while not self.stopper:
             new_state = self.stat_palabra_tasks
-            if new_state != last_state or i % 30 == 0:
+            if new_state != last_state or i % show_every == 0:
                 debug(self.stat)
                 last_state = new_state
             i += 1
@@ -67,4 +67,5 @@ class Stat(Task):
 
     @property
     def stat(self):
-        return f"{self.stat_palabra_tasks}\n{self.stat_asyncio_tasks}\n\n{diagnose_hanging_tasks()}"
+        deep = diagnose_hanging_tasks() if self.manager.cfg.deep_debug else ""
+        return f"{deep}\n{self.stat_palabra_tasks}\n{self.stat_asyncio_tasks}"

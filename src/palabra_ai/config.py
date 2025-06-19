@@ -23,7 +23,8 @@ from palabra_ai.util.logger import set_logging
 
 env = Env(prefix="PALABRA_")
 env.read_env()
-DEBUG = env.bool("DEBUG", default=True)
+DEBUG = env.bool("DEBUG", default=False)
+DEEP_DEBUG = env.bool("DEEP_DEBUG", default=False)
 LOG_FILE = env.path("LOG_FILE", default=None)
 
 SINGLE_TARGET_SUPPORTED_COUNT = 1
@@ -320,6 +321,7 @@ class Config(BaseModel):
 
     log_file: Path | str | None = Field(default=LOG_FILE, exclude=True)
     debug: bool = Field(default=DEBUG, exclude=True)
+    deep_debug: bool = Field(default=DEEP_DEBUG, exclude=True)
 
     trace_file: Path | str | None = Field(default=None, exclude=True)
 

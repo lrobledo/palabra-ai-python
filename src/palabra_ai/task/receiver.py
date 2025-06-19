@@ -6,8 +6,8 @@ from typing import Any
 
 from palabra_ai.base.adapter import Writer
 from palabra_ai.base.task import Task
-from palabra_ai.config import SHUTDOWN_TIMEOUT
 from palabra_ai.config import (
+    SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
     TRACK_RETRY_DELAY,
     TRACK_RETRY_MAX_ATTEMPTS,
@@ -75,8 +75,10 @@ class ReceiverTranslatedAudio(Task):
         debug("Cleaning up ReceiverTranslatedAudio...")
         if self._track:
             try:
-                await asyncio.wait_for(self._track.stop_listening(), timeout=SHUTDOWN_TIMEOUT)
-            except asyncio.TimeoutError:
+                await asyncio.wait_for(
+                    self._track.stop_listening(), timeout=SHUTDOWN_TIMEOUT
+                )
+            except TimeoutError:
                 error(f"Timeout while stopping track for {self.target_language}")
             self._track = None
         +self.eof  # noqa

@@ -12,5 +12,3 @@ async def warn_if_cancel(coro, warning_msg: str):
     except asyncio.CancelledError:
         warning(warning_msg)
         raise
-
-

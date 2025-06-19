@@ -6,9 +6,12 @@ from dataclasses import KW_ONLY, dataclass, field
 
 import palabra_ai
 from palabra_ai.base.task import Task
-from palabra_ai.config import QUEUE_READ_TIMEOUT
-from palabra_ai.config import SHUTDOWN_TIMEOUT
-from palabra_ai.config import SLEEP_INTERVAL_DEFAULT, Config
+from palabra_ai.config import (
+    QUEUE_READ_TIMEOUT,
+    SHUTDOWN_TIMEOUT,
+    SLEEP_INTERVAL_DEFAULT,
+    Config,
+)
 from palabra_ai.task.realtime import Realtime, RtMsg
 from palabra_ai.util.logger import debug
 from palabra_ai.util.orjson import to_json
@@ -55,7 +58,6 @@ class Logger(Task):
         if self._out_task:
             self._out_task.cancel()
 
-
         logs = []
         try:
             with open(self.cfg.log_file) as f:
@@ -89,8 +91,10 @@ class Logger(Task):
         self.rt.out_foq.unsubscribe(self)
 
         debug(f"{self.name} tasks cancelled, waiting for completion...")
-        await asyncio.gather(asyncio.wait_for(self._in_task, timeout=SHUTDOWN_TIMEOUT),
-        asyncio.wait_for(self._out_task, timeout=SHUTDOWN_TIMEOUT))
+        await asyncio.gather(
+            asyncio.wait_for(self._in_task, timeout=SHUTDOWN_TIMEOUT),
+            asyncio.wait_for(self._out_task, timeout=SHUTDOWN_TIMEOUT),
+        )
         debug(f"{self.name} tasks completed")
 
     async def _exit(self):
@@ -106,10 +110,8 @@ class Logger(Task):
                     break
                 self._messages.append(rt_msg)
                 q.task_done()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
             except asyncio.CancelledError:
                 debug(f"Consumer for {q} cancelled")
                 break
-
-

@@ -169,7 +169,9 @@ class PalabraRTClient:
                 publication = await self.room.wait_for_track_publish(
                     participant, _PALABRA_TRANSLATOR_TRACK_NAME_PREFIX + lang
                 )
-                response[lang] = RemoteAudioTrack(self.tg, lang, participant, publication)
+                response[lang] = RemoteAudioTrack(
+                    self.tg, lang, participant, publication
+                )
         except asyncio.CancelledError:
             warning("PalabraRTClient get_translation_tracks cancelled")
             raise

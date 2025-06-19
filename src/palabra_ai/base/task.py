@@ -4,10 +4,9 @@ from dataclasses import KW_ONLY, dataclass, field
 
 import loguru
 
-from palabra_ai.config import SHUTDOWN_TIMEOUT
+from palabra_ai.config import DEEP_DEBUG, SHUTDOWN_TIMEOUT
 from palabra_ai.util.emoji import Emoji
-from palabra_ai.util.logger import debug, error
-from palabra_ai.util.logger import warning
+from palabra_ai.util.logger import debug, error, warning
 
 
 class TaskEvent(asyncio.Event):
@@ -57,14 +56,12 @@ class Task(abc.ABC):
         default_factory=asyncio.TaskGroup, init=False, repr=False
     )
     _task: asyncio.Task = field(default=None, init=False, repr=False)
+    _sub_tasks: list[asyncio.Task] = field(default_factory=list, init=False, repr=False)
     _name: str | None = field(default=None, init=False, repr=False)
     ready: TaskEvent = field(default_factory=TaskEvent, init=False)
     eof: TaskEvent = field(default_factory=TaskEvent, init=False)
     stopper: TaskEvent = field(default_factory=TaskEvent)
     _state: list[str] = field(default_factory=list, init=False, repr=False)
-
-    # def __init__(self, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
 
     def __call__(self, tg: asyncio.TaskGroup) -> "Task":
         self.root_tg = tg
@@ -76,39 +73,36 @@ class Task(abc.ABC):
 
     async def run(self):
         self._state.append("🚀")
-        async with self.sub_tg:
-            try:
-
-                debug(f"{self.name}.run() starting...")
-                self._state.append("🌀")
-                await self._boot()
-                self._state.append("🟢")
-                +self.ready  # noqa
-                debug(f"{self.name}.run() ready, doing...")
-                self._state.append("💫")
-                await self.do()
-                self._state.append("🎉")
-                debug(f"{self.name}.run() done, exiting...")
-                +self.stopper # noqa
-                # self.sub_tg._abort()
-            except asyncio.CancelledError:
-                self._state.append("🚫")
-                debug(f"{self.name}.run() cancelled, exiting...")
-                # raise
-            except Exception as e:
-                self._state.append("💥")
-                error(f"{self.name}.run() failed with error: {e}, exiting...")
-                # raise
-            finally:
-                +self.stopper # noqa
-                self._state.append("👋")
-                debug(f"{self.name}.run() trying to exit...")
-                result = await self._exit()
-                self._state.append("🔴")
-                debug(f"{self.name}.run() exited successfully!")
-                # self.sub_tg._abort()
-                # self.root_tg._abort()
-            return result
+        try:
+            async with self.sub_tg:
+                try:
+                    debug(f"{self.name}.run() starting...")
+                    self._state.append("🌀")
+                    await self._boot()
+                    self._state.append("🟢")
+                    +self.ready  # noqa
+                    debug(f"{self.name}.run() ready, doing...")
+                    self._state.append("💫")
+                    await self.do()
+                    self._state.append("🎉")
+                    debug(f"{self.name}.run() done, exiting...")
+                    +self.stopper  # noqa
+                except asyncio.CancelledError:
+                    self._state.append("🚫")
+                    debug(f"{self.name}.run() cancelled, exiting...")
+                    raise
+                except Exception as e:
+                    self._state.append("💥")
+                    error(f"{self.name}.run() failed with error: {e}, exiting...")
+                    raise
+        finally:
+            +self.stopper  # noqa
+            self._state.append("👋")
+            debug(f"{self.name}.run() trying to exit...")
+            result = await self._exit()
+            self._state.append("🔴")
+            debug(f"{self.name}.run() exited successfully!")
+        return result
 
     async def _boot(self):
         return await self.boot()
@@ -128,12 +122,31 @@ class Task(abc.ABC):
     async def _exit(self):
         try:
             return await asyncio.wait_for(self.exit(), timeout=SHUTDOWN_TIMEOUT)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             error(f"{self.name}.exit() timed out after {SHUTDOWN_TIMEOUT}s")
-            self._task.cancel()
-            warning(f"{self.name}.exit() last chance...")
-            await self._task
-            warning(f"{self.name}.exit() last chance used!")
+            # Cancel all subtasks
+            await self.cancel_all_subtasks()
+            warning(f"{self.name}.exit() all subtasks cancelled")
+
+    async def cancel_all_subtasks(self):
+        """Cancel all tasks in sub_tg"""
+        # Get all tasks from the sub_tg
+        all_tasks = [
+            t
+            for t in asyncio.all_tasks()
+            if t.get_name() and t.get_name().startswith(self.name)
+        ]
+        for task in all_tasks:
+            if task != self._task and not task.done():
+                debug(f"Cancelling subtask: {task.get_name()}")
+                task.cancel()
+
+        # Wait for cancellation with timeout
+        if all_tasks:
+            done, pending = await asyncio.wait(all_tasks, timeout=1.0)
+            for task in pending:
+                warning(f"Force cancelling hung task: {task.get_name()}")
+                task.cancel()
 
     @property
     def name(self) -> str:
@@ -153,5 +166,8 @@ class Task(abc.ABC):
         ready = Emoji.bool(self.ready)
         stopper = Emoji.bool(self.stopper)
         eof = Emoji.bool(self.eof)
-        states = " ".join(self._state) if self._state else "⭕"
-        return f"{self.name:>28}(ready={ready}, stopper={stopper}, eof={eof}, states={states})"
+        states = "".join(self._state) if self._state else "⭕"
+        if DEEP_DEBUG:
+            return f"{self.name:>28}(ready={ready}, stopper={stopper}, eof={eof}, states={states})"
+        else:
+            return f"{self.name:>28}🎬{ready} 🪦{stopper} 🏁{eof} {states}"

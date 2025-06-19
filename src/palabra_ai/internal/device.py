@@ -207,7 +207,6 @@ class OutputSoundDevice:
 
 
 class SoundDeviceManager:
-
     tg: asyncio.TaskGroup
 
     def __init__(self):
@@ -243,8 +242,8 @@ class SoundDeviceManager:
     ) -> InputSoundDevice:
         device = self.input_device_map.get(device_name)
         if device is None:
-            self.input_device_map[device_name] = device = InputSoundDevice(self.tg,
-                name=device_name, manager=self
+            self.input_device_map[device_name] = device = InputSoundDevice(
+                self.tg, name=device_name, manager=self
             )
         await device.start_reading(
             async_callback_fn, sample_rate, channels, audio_chunk_seconds

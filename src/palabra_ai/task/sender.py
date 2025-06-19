@@ -52,10 +52,17 @@ class SenderSourceAudio(Task):
             if not chunk:
                 continue
 
+            self.bytes_sent += len(chunk)
             await self._track.push(chunk)
 
     async def exit(self):
         if self._track:
-            await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
-            await asyncio.wait_for(self._track.close(), timeout=TRACK_CLOSE_TIMEOUT)
+            try:
+                await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
+            except asyncio.CancelledError:
+                debug(f"T{self.name}: Cancelled during publication end delay")
+            try:
+                await asyncio.wait_for(self._track.close(), timeout=TRACK_CLOSE_TIMEOUT)
+            except TimeoutError:
+                debug(f"T{self.name}: Track close timed out")
         +self.eof  # noqa
