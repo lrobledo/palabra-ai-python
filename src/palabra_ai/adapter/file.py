@@ -6,8 +6,9 @@ from pathlib import Path
 
 from loguru import logger
 
-from palabra_ai.adapter._common import handle_cancellation, run_until_stopped
+from palabra_ai.adapter._common import warn_if_cancel
 from palabra_ai.base.adapter import Reader, Writer
+from palabra_ai.config import SLEEP_INTERVAL_DEFAULT
 from palabra_ai.internal.audio import (
     convert_any_to_pcm16,
     read_from_disk,
@@ -36,13 +37,12 @@ class FileReader(Reader):
     def set_track_settings(self, track_settings: AudioTrackSettings) -> None:
         self._track_settings = track_settings
 
-    async def run(self):
+    async def boot(self):
         if not self._track_settings:
             self._track_settings = AudioTrackSettings()
 
         logger.debug(f"Loading and converting audio file {self.path}...")
-
-        raw_data = await handle_cancellation(
+        raw_data = await warn_if_cancel(
             read_from_disk(self.path), "FileReader read_from_disk cancelled"
         )
         logger.debug(f"Loaded {len(raw_data)} bytes from {self.path}")
@@ -53,16 +53,22 @@ class FileReader(Reader):
                 raw_data, sample_rate=self._track_settings.sample_rate
             )
             logger.debug(f"Converted to {len(self._pcm_data)} bytes")
-        except asyncio.CancelledError:
-            logger.warning("FileReader audio conversion cancelled")
-            raise
         except Exception as e:
             logger.error(f"Failed to convert audio: {e}")
             raise
 
-        +self.ready  # noqa
+    async def do(self):
+        while not self.stopper and not self.eof:
+            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
 
-        await self._benefit()
+    async def exit(self):
+        logger.debug(
+            f"{self.name} exiting, position: {self._position}, eof: {self.eof}"
+        )
+        if not self.eof:
+            logger.warning(f"{self.name} stopped without reaching EOF")
+        else:
+            logger.debug(f"{self.name} reached EOF at position {self._position}")
 
     async def read(self, size: int | None = None) -> bytes | None:
         await self.ready
@@ -91,24 +97,15 @@ class FileWriter(Writer):
         self.path = Path(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._buffer_writer = AudioBufferWriter(queue=self.q)
-        self._started = False
 
-    async def run(self):
-        try:
-            await self._buffer_writer.start()
-            self._started = True
-            logger.debug("FileWriter started")
-            +self.ready  # noqa
+    async def boot(self):
+        await self._buffer_writer.start()
 
-            await run_until_stopped(self)
+    async def do(self):
+        while not self.stopper:
+            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
 
-        except asyncio.CancelledError:
-            logger.warning("FileWriter run cancelled")
-            raise
-        finally:
-            await self.finalize()
-
-    async def finalize(self) -> bytes:
+    async def exit(self) -> bytes:
         logger.debug("Finalizing FileWriter...")
 
         # Wait for the buffer writer task to complete (it will finish when EOF marker is processed)
@@ -129,7 +126,7 @@ class FileWriter(Writer):
             wav_data = self._buffer_writer.to_wav_bytes()
             if wav_data:
                 logger.debug(f"Generated {len(wav_data)} bytes of WAV data")
-                await handle_cancellation(
+                await warn_if_cancel(
                     write_to_disk(self.path, wav_data),
                     "FileWriter write_to_disk cancelled",
                 )
@@ -142,9 +139,8 @@ class FileWriter(Writer):
         except Exception as e:
             logger.error(f"Error converting to WAV: {e}", exc_info=True)
 
-        return wav_data
+        +self.eof  # noqa
 
-    async def cancel(self) -> None:
         if self.delete_on_error and self.path.exists():
             try:
                 self.path.unlink()
@@ -158,3 +154,4 @@ class FileWriter(Writer):
             logger.debug(
                 f"Keeping partial file {self.path} (delete_on_error={self.delete_on_error})"
             )
+        return wav_data

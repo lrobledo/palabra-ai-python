@@ -25,7 +25,7 @@ class WebSocketClient:
         self._task = None
 
     def connect(self):
-        self._task = asyncio.create_task(self.join())
+        self._task = asyncio.create_task(self.join(), name="Ws:join")
 
     async def join(self):
         while self._keep_running:
@@ -33,8 +33,12 @@ class WebSocketClient:
                 async with websockets.connect(self._uri) as websocket:
                     self._websocket = websocket
 
-                    receive_task = asyncio.create_task(self._receive_message())
-                    send_task = asyncio.create_task(self._send_message())
+                    receive_task = asyncio.create_task(
+                        self._receive_message(), name="Ws:receive"
+                    )
+                    send_task = asyncio.create_task(
+                        self._send_message(), name="Ws:send"
+                    )
 
                     done, pending = await asyncio.wait(
                         [receive_task, send_task],

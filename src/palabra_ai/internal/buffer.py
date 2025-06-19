@@ -28,7 +28,7 @@ class AudioBufferWriter:
         logger.debug(f"AudioBufferWriter.start() called, _task={self._task}")
         if self._task is None:
             logger.debug("Creating _write task...")
-            self._task = asyncio.create_task(self._write())
+            self._task = asyncio.create_task(self._write(), name="Buffer:write")
             logger.debug(f"AudioBufferWriter.start() created task: {self._task}")
             await asyncio.sleep(0.1)
             if self._task.done():

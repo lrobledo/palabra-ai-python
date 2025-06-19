@@ -1,88 +1,29 @@
 from __future__ import annotations
 
 import asyncio
-import time
-from collections import Counter, deque
 from dataclasses import KW_ONLY, dataclass, field
 
 from palabra_ai.base.adapter import Reader, Writer
-from palabra_ai.base.message import Message
 from palabra_ai.base.task import Task, TaskEvent
 from palabra_ai.config import (
-    COMPLETION_WAIT_TIMEOUT,
-    EMPTY_MESSAGE_THRESHOLD,
-    MONITOR_TIMEOUT,
+    BOOT_TIMEOUT,
+    SAFE_PUBLICATION_END_DELAY,
+    SHUTDOWN_TIMEOUT,
+    SINGLE_TARGET_SUPPORTED_COUNT,
     SLEEP_INTERVAL_DEFAULT,
+    SLEEP_INTERVAL_LONG,
     Config,
 )
+from palabra_ai.exc import ConfigurationError
+from palabra_ai.internal.rest import SessionCredentials
+from palabra_ai.internal.webrtc import AudioTrackSettings
+from palabra_ai.task.logger import Logger
+from palabra_ai.task.monitor import RtMonitor
 from palabra_ai.task.realtime import Realtime
 from palabra_ai.task.receiver import ReceiverTranslatedAudio
 from palabra_ai.task.sender import SenderSourceAudio
-from palabra_ai.util.emoji import Emoji
+from palabra_ai.task.transcription import Transcription
 from palabra_ai.util.logger import debug, info
-
-STATS_LOG_INTERVAL = 5.0  # seconds
-
-
-@dataclass
-class Stats:
-    start_time: float = field(default_factory=time.time)
-    last_log_time: float = field(default_factory=time.time)
-    translation_started: bool = False
-    translation_complete: bool = False
-    bytes_sent: int = 0
-    bytes_received: int = 0
-    reader_eof_received: bool = False
-    message_history: deque[Message] = field(
-        default_factory=lambda: deque(maxlen=EMPTY_MESSAGE_THRESHOLD)
-    )
-    message_counter: Counter[Message.Type] = field(default_factory=Counter)
-    process_states: dict = field(default_factory=dict)
-    # queue_levels: dict[str, int] = field(default_factory=dict)
-
-    @property
-    def elapsed(self) -> float:
-        return time.time() - self.start_time
-
-    @property
-    def silent_count(self) -> int:
-        return sum(
-            1
-            for msg in self.message_history
-            if msg.type_ not in Message.IN_PROCESS_TYPES
-        )
-
-    def to_dict(self) -> dict:
-        return {
-            "elapsed": round(self.elapsed, 1),
-            "bytes_sent": self.bytes_sent,
-            "bytes_received": self.bytes_received,
-            "messages": dict(self.message_counter.most_common()),
-            "silent_messages": f"{self.silent_count}/{len(self.message_history)}",
-            "eof": self.reader_eof_received,
-            "translation_started": self.translation_started,
-            "translation_complete": self.translation_complete,
-            "processes": self.process_states,
-        }
-
-    def to_log_string(self) -> str:
-        process_states_str = ", ".join(
-            f"{name}: {state}" for name, state in self.process_states.items()
-        )
-        # queue_levels_str = ", ".join(
-        #     f"{lang}: {level}ms" for lang, level in self.queue_levels.items()
-        # )
-        return (
-            f"📊 [STATS] "
-            f"⏱️ {self.elapsed:.1f}s | "
-            f"📤 {self.bytes_sent}B | "
-            f"📥 {self.bytes_received}B | "
-            f"📨 {dict(self.message_counter.most_common())} | "
-            f"🔇 {self.silent_count}/{len(self.message_history)} | "
-            f"🏁 EOF: {'✅' if self.reader_eof_received else '❌'} | "
-            f"⚙️ {process_states_str} "
-            # f"📈 Queue Levels: {queue_levels_str} "
-        )
 
 
 @dataclass
@@ -90,170 +31,215 @@ class Manager(Task):
     """Manages the translation process and monitors progress."""
 
     cfg: Config
-    rt: Realtime
-    sender: SenderSourceAudio
-    receiver: ReceiverTranslatedAudio
-    writer: Writer
-    reader: Reader
-    input_stopper: TaskEvent
+    credentials: SessionCredentials
     _: KW_ONLY
-    stat: Stats = field(default_factory=Stats, init=False)
+    reader: Reader = field(init=False)
+    writer: Writer = field(init=False)
+    track_settings: AudioTrackSettings = field(default_factory=AudioTrackSettings)
+    rt: Realtime = field(init=False)
+    sender: SenderSourceAudio = field(init=False)
+    receiver: ReceiverTranslatedAudio = field(init=False)
+    logger: Logger | None = field(init=False)
+    rtmon: RtMonitor = field(init=False)
+    transcription: Transcription = field(init=False)
+
+    tasks: list[Task] = field(default_factory=list, init=False)
+
     _debug_mode: bool = field(default=True, init=False)
     _transcriptions_shown: set = field(default_factory=set, init=False)
+    _state_stopper: TaskEvent = field(default_factory=TaskEvent, init=False)
 
-    async def run(self):
-        await self._wait_subtasks()
-        +self.ready  # noqa
+    def __post_init__(self):
+        if len(self.cfg.targets) != SINGLE_TARGET_SUPPORTED_COUNT:
+            raise ConfigurationError("Only single target language supported")
 
-        async with asyncio.TaskGroup() as tg:
-            monitor = tg.create_task(self.loop())
-            eof = tg.create_task(self._check_eof_loop())
+        self.reader = self.cfg.source.reader
+        if not isinstance(self.reader, Reader):
+            raise ConfigurationError("src.reader must be Reader")
 
-            await self._wait_for_completion()
-            await self._handle_completion()
+        target = self.cfg.targets[0]
+        self.writer = target.writer
+        if not isinstance(self.writer, Writer):
+            raise ConfigurationError("target.writer must be Writer")
 
-            monitor.cancel()
-            eof.cancel()
+        if hasattr(self.writer, "set_track_settings"):
+            self.writer.set_track_settings(self.track_settings)
+        if hasattr(self.reader, "set_track_settings"):
+            self.reader.set_track_settings(self.track_settings)
 
-    async def _wait_subtasks(self):
-        await asyncio.gather(self.rt.ready, self.sender.ready, self.receiver.ready)
+        self.rt = Realtime(self.cfg, self.credentials)
+        if self.cfg.log_file:
+            self.logger = Logger(self.cfg, self.rt)
+            self.tasks.append(self.logger)
 
-    async def loop(self):
-        queue = self.rt.out_foq.subscribe("manager", maxsize=0)
+        self.transcription = Transcription(self.cfg, self.rt)
 
-        while not self.stopper:
-            try:
-                rt_msg = await asyncio.wait_for(queue.get(), timeout=MONITOR_TIMEOUT)
-                queue.task_done()
-            except TimeoutError:
-                await self._log_stats()
-                continue
-
-            msg = rt_msg.msg
-
-            debug(f"📨 Monitor received: {msg}...")
-
-            self.stat.message_history.append(msg)
-            self.stat.message_counter[msg.type_] += 1
-
-            match msg.type_:
-                case type_ if type_ in Message.IN_PROCESS_TYPES:
-                    self.stat.translation_started = True
-                    _dedup = msg.dedup
-                    if _dedup not in self._transcriptions_shown:
-                        info(repr(msg))
-                        self._transcriptions_shown.add(_dedup)
-
-                case Message.Type._QUEUE_LEVEL:
-                    queue_level = msg.current_queue_level_ms
-                    if queue_level > 0:
-                        # self.stat.queue_levels[msg.language.code] = queue_level
-                        self.stat.translation_started = True
-
-            if self._is_complete():
-                debug("🏁 Translation complete conditions met")
-                self.stat.translation_complete = True
-
-            await self._log_stats()
-
-    def _is_complete(self) -> bool:
-        eof_received = self.stat.reader_eof_received
-        translation_started = self.stat.translation_started
-        has_threshold_messages_count = (
-            len(self.stat.message_history) >= EMPTY_MESSAGE_THRESHOLD
+        self.receiver = ReceiverTranslatedAudio(
+            self.cfg,
+            self.writer,
+            self.rt,
+            target.lang.code,
         )
-        all_messages_are_empty = all(
-            msg.type_ not in Message.IN_PROCESS_TYPES
-            for msg in self.stat.message_history
+
+        self.sender = SenderSourceAudio(
+            self.cfg,
+            self.rt,
+            self.reader,
+            self.cfg.to_dict(),
+            self.track_settings,
         )
-        complete_conditions = {
-            "eof": eof_received,
-            "started": translation_started,
-            f"has_{EMPTY_MESSAGE_THRESHOLD}": has_threshold_messages_count,
-            f"empty_{EMPTY_MESSAGE_THRESHOLD}": all_messages_are_empty,
-        }
-        debug(", ".join(f"{k}:{Emoji.bool(v)}" for k, v in complete_conditions.items()))
-        return all(complete_conditions.values())
 
-    async def _check_eof_loop(self):
-        await self.reader.eof
-        self.stat.reader_eof_received = True
-        debug("🏁 Reader EOF detected")
+        self.rtmon = RtMonitor(self.cfg, self.rt)
 
-    async def _wait_for_completion(self):
-        while not self.stat.translation_complete:
-            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
-            if any(
-                [
-                    self.input_stopper,
-                    self.sender.stopper,
-                    self.receiver.stopper,
-                    self.writer.stopper,
-                    self.rt.stopper,
-                    self.reader.stopper,
-                    self.stat.translation_complete,
-                    self.stat.reader_eof_received,
-                ]
-            ):
-                debug(
-                    "🏁 One of the input processes has stopped, checking completion..."
-                )
-                break
-        info("🏁 done")
+        self.tasks.extend(
+            [
+                self,
+                self.rtmon,
+                self.rt,
+                self.reader,
+                self.writer,
+                self.receiver,
+                self.sender,
+                self.transcription,
+            ]
+        )
 
-    async def _handle_completion(self):
-        debug("🎬 Translation complete, stopping input processes...")
-        +self.input_stopper  # noqa
-
-        await asyncio.sleep(COMPLETION_WAIT_TIMEOUT)
-
-        while not self.writer._task.done():
-            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
-
-        debug("🎉 All processes completed")
-
-    async def _log_stats(self):
-        if (
-            not self._debug_mode
-            or time.time() - self.stat.last_log_time < STATS_LOG_INTERVAL
-        ):
-            return
-
-        self.stat.process_states = await self._get_process_states()
-        debug(self.stat.to_log_string())
-        self.stat.last_log_time = time.time()
-
-    async def _get_process_states(self) -> dict:
-        process_names = {
-            "FileReader",
-            "FileWriter",
-            "Realtime",
-            "Buffer",
-            "Manager",
-            "ReceiverTranslatedAudio",
-            "SenderSourceAudio",
-        }
-
-        return {
-            task.get_name(): (
-                "🏃 running"
-                if not task.done()
-                else "❌ cancelled"
-                if task.cancelled()
-                else "✅ done"
-                if not task.exception()
-                else "💥 error"
-            )
-            for task in asyncio.all_tasks()
-            if any(pname in task.get_name() for pname in process_names)
-        }
+    def asyncio_tasks_states(self):
+        states = {}
+        for task in asyncio.all_tasks():
+            if task.cancelled():
+                v = "❌"
+            elif task.done():
+                v = "✅"
+            else:
+                v = "🏃"
+            states[task.get_name()] = v
+        return states
 
     @property
-    def is_translation_complete(self) -> bool:
-        return self.stat.translation_complete
+    def stat_palabra_tasks(self):
+        return "\n".join(
+            (
+                "\nPalabra tasks:",
+                "\n".join([str(t) for t in self.tasks]),
+            )
+        )
 
-    def update_bytes_sent(self, bytes_count: int):
-        self.stat.bytes_sent += bytes_count
+    @property
+    def stat_asyncio_tasks(self):
+        return "\n".join(
+            (
+                "\nAsyncio tasks:\n",
+                " | ".join(
+                    sorted([t.get_name() for t in asyncio.all_tasks()])
+                )
+            )
+        )
 
-    def update_bytes_received(self, bytes_count: int):
-        self.stat.bytes_received += bytes_count
+    @property
+    def stat(self):
+        return f"{self.stat_palabra_tasks}\n{self.stat_asyncio_tasks}"
+
+    async def tasks_state_monitor(self):
+        last_state = ""
+        i = 0
+        while not self._state_stopper:
+            new_state = self.stat_palabra_tasks
+            if new_state != last_state or i % 30 == 0:
+                debug(self.stat)
+                last_state = new_state
+            i += 1
+            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+        await asyncio.sleep(SLEEP_INTERVAL_LONG)
+        debug(self.stat)
+
+    async def start_tasks(self):
+        debug(f"🔧 {self.name} run listening...")
+        self.rtmon(self.sub_tg)
+        self.rt(self.sub_tg)
+        self.transcription(self.sub_tg)
+        self.writer(self.sub_tg)
+        self.receiver(self.sub_tg)
+        self.sender(self.sub_tg)
+        await self.rt.ready
+        await self.rtmon.ready
+        await self.writer.ready
+        await self.receiver.ready
+        await self.sender.ready
+        await self.transcription.ready
+        debug(f"🔧 {self.name} listening ready!")
+
+        debug(f"🔧 {self.name} run reader...")
+        self.reader(self.sub_tg)
+        await self.reader.ready
+        debug(f"🔧 {self.name} reader ready!")
+
+    async def boot(self):
+        debug(f"🔧 {self.name}...")
+
+        if self.cfg.debug:
+            self.root_tg.create_task(
+                self.tasks_state_monitor(), name="Manager:task_info"
+            )
+
+        try:
+            await asyncio.wait_for(self.start_tasks(), timeout=BOOT_TIMEOUT)
+        except TimeoutError:
+            raise ConfigurationError(
+                f"Timeout {BOOT_TIMEOUT}s while starting tasks. "
+                "Check your configuration and network connection."
+            )
+
+    async def do(self):
+        while not self.stopper and not self.eof:
+            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+            if any([t.eof for t in self.tasks]) or any([t.stopper for t in self.tasks]):
+                debug(f"🔚 {self.name} received EOF or stopper, exiting...")
+                info("🏁 done!")
+                +self.stopper  # noqa
+        await self.graceful_exit()
+
+    async def exit(self):
+        try:
+            await self.stop_writer()
+        except asyncio.CancelledError:
+            debug(f"🔧 {self.name} writer shutdown cancelled")
+        debug(f"🔧 {self.name} exiting...")
+        +self._state_stopper  # noqa
+        +self.stopper  # noqa
+
+    async def shutdown_task(self, task):
+        +task.stopper  # noqa
+        debug(f"🔧 {self.name} shutting down task: {task.name}...")
+        try:
+            await asyncio.wait_for(self.reader._task, timeout=SHUTDOWN_TIMEOUT)
+        except TimeoutError:
+            debug(f"🔧 {self.name} task {task.name} shutdown timeout!")
+            task._task.cancel()
+        except Exception as e:
+            debug(f"🔧 {self.name} task {task.name} shutdown error: {e}")
+            task._task.cancel()
+
+    async def graceful_exit(self):
+        try:
+            await self.shutdown_task(self.reader)
+            await self.shutdown_task(self.sender)
+            await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
+            await self.shutdown_task(self.receiver)
+            await self.shutdown_task(self.rtmon)
+            await self.shutdown_task(self.transcription)
+            await self.shutdown_task(self.rt)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await self.stop_writer()
+
+    async def stop_writer(self):
+        +self.writer.stopper  # noqa
+        debug(f"🔧 {self.name} waiting for writer to finish...")
+        while not self.writer._task.done():
+            try:
+                await self.writer._task
+            except asyncio.CancelledError:
+                self.writer._task.uncancel()
+        debug(f"🔧 {self.name} writer finished!")

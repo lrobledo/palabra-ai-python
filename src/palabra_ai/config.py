@@ -11,22 +11,23 @@ from pydantic import (
     ConfigDict,
     Field,
     PlainSerializer,
-    PrivateAttr,
     model_validator,
 )
+from pydantic import PrivateAttr
+from pydantic import SkipValidation
 
 from palabra_ai.base.message import Message
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.lang import Language
-from palabra_ai.types import T_IN_PCM, T_ON_TRANSCRIPTION, T_OUT_PCM
+from palabra_ai.types import T_ON_TRANSCRIPTION, T_READER, T_WRITER
 from palabra_ai.util.logger import set_logging
 
 env = Env(prefix="PALABRA_")
 env.read_env()
-DEBUG = env.bool("DEBUG", default=False)
+DEBUG = env.bool("DEBUG", default=True)
 LOG_FILE = env.path("LOG_FILE", default=None)
 
-
+SINGLE_TARGET_SUPPORTED_COUNT = 1
 # Audio Processing Constants
 CHUNK_SIZE = 16384
 SAMPLE_RATE_DEFAULT = 48000
@@ -36,10 +37,13 @@ OUTPUT_DEVICE_BLOCK_SIZE = 1024
 AUDIO_CHUNK_SECONDS = 0.5
 
 # Timing Constants
+BOOT_TIMEOUT = 30.0
+SHUTDOWN_TIMEOUT = 5.0
 SAFE_PUBLICATION_END_DELAY = 10.0
 MONITOR_TIMEOUT = 0.1
 DEFAULT_PROCESS_TIMEOUT = 300.0
 TRACK_WAIT_TIMEOUT = 30.0
+TRACK_CLOSE_TIMEOUT = 5.0
 FINALIZE_WAIT_TIME = 5.0
 SLEEP_INTERVAL_DEFAULT = 0.1
 SLEEP_INTERVAL_LONG = 1.0
@@ -62,7 +66,7 @@ AUDIO_PROGRESS_LOG_INTERVAL = 100000
 EMPTY_MESSAGE_THRESHOLD = 10
 EOF_DRAIN_TIMEOUT = 5.0
 COMPLETION_WAIT_TIMEOUT = 2.0
-STATS_LOG_INTERVAL = 1.0
+STATS_LOG_INTERVAL = 5.0
 
 # Preprocessing Constants
 MIN_SENTENCE_CHARACTERS_DEFAULT = 80
@@ -241,28 +245,31 @@ class QueueConfigs(BaseModel):
 
 class SourceLang(BaseModel):
     lang: LanguageField
+    _reader: T_READER = PrivateAttr()
+    _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(default=None)
+
     transcription: Transcription = Field(default_factory=Transcription)
 
-    _in_pcm: T_IN_PCM = PrivateAttr(default=None)
-    _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(default=None)
 
     def __init__(
         self,
         lang: LanguageField,
-        in_pcm: T_IN_PCM,
+        reader: T_READER,
         /,
         on_transcription: T_ON_TRANSCRIPTION | None = None,
         **kwargs,
     ):
         super().__init__(lang=lang, **kwargs)
-        self._in_pcm = in_pcm
+        self._reader = reader
         self._on_transcription = on_transcription
 
-    def merge_transcription(self, other: Transcription | None):
-        if other:
-            self.transcription = self.transcription.model_copy(
-                update=other.model_dump(exclude_unset=True)
-            )
+    @property
+    def reader(self) -> T_READER:
+        return self._reader
+
+    @property
+    def on_transcription(self) -> T_ON_TRANSCRIPTION | None:
+        return self._on_transcription
 
 
 class TargetLang(BaseModel):
@@ -270,32 +277,35 @@ class TargetLang(BaseModel):
     translation: Translation = Field(default_factory=Translation)
 
     # TODO: get sync and async callback and run in loop/thread automatically
-    _out_pcm: T_OUT_PCM | None = PrivateAttr(default=None)
+    _writer: T_WRITER | None = PrivateAttr(default=None)
     _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(
         default=None
-    )  # TODO: DO IT!
+    )
 
     def __init__(
         self,
         lang: LanguageField,
         /,
-        out_pcm: T_OUT_PCM = None,
-        on_transcription: T_ON_TRANSCRIPTION = None,
+        writer: T_WRITER | None = None,
+        on_transcription: T_ON_TRANSCRIPTION | None = None,
         **kwargs,
     ):
         super().__init__(lang=lang, **kwargs)
-        if not any([out_pcm, on_transcription]):
+        if not any([writer, on_transcription]):
             raise ConfigurationError(
-                f"Use translated audio or transcription for lang: {self.lang}"
+                f"You should use at least [writer] or [on_transcription] for TargetLang: {self.lang}, "
             )
-        self._out_pcm = out_pcm
+        self._writer = writer
         self._on_transcription = on_transcription
 
-    def merge_translation(self, other: Translation | None):
-        if other:
-            self.translation = self.translation.model_copy(
-                update=other.model_dump(exclude_unset=True)
-            )
+    @property
+    def writer(self) -> T_WRITER | None:
+        return self._writer
+
+    @property
+    def on_transcription(self) -> T_ON_TRANSCRIPTION | None:
+        return self._on_transcription
+
 
 
 class Config(BaseModel):
@@ -313,6 +323,8 @@ class Config(BaseModel):
     log_file: Path | str | None = Field(default=LOG_FILE, exclude=True)
     debug: bool = Field(default=DEBUG, exclude=True)
 
+    trace_file: Path | str | None = Field(default=None, exclude=True)
+
     def __init__(
         self, source: SourceLang, targets: list[TargetLang] | TargetLang, **kwargs
     ):
@@ -326,6 +338,7 @@ class Config(BaseModel):
         if self.log_file:
             self.log_file = Path(self.log_file).absolute()
             self.log_file.parent.mkdir(exist_ok=True, parents=True)
+            self.trace_file = self.log_file.with_suffix(".trace.json")
         set_logging(self.debug, self.log_file)
         super().model_post_init(context)
 

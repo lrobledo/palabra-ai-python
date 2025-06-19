@@ -1,7 +1,6 @@
 import sys
 from logging import DEBUG, INFO
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
@@ -15,7 +14,7 @@ def set_logging(debug: bool, log_file: Path):
     )
     if log_file:
         logger.add(
-            str((log_file.with_suffix(".log")).absolute()),
+            str(log_file.absolute()),
             level=DEBUG,
             enqueue=True,
             buffering=1,  # Line buffering for immediate write
@@ -34,15 +33,6 @@ critical = logger.critical
 exception = logger.exception
 log = logger.log
 trace = logger.trace
-
-ALL_LOGS = []
-
-
-def catcher(message: Any) -> None:
-    ALL_LOGS.append(message)
-
-
-logger.add(catcher)
 
 
 __all__ = [

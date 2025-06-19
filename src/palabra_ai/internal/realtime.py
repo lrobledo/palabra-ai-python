@@ -30,7 +30,7 @@ class RemoteAudioTrack:
 
     def start_listening(self, q: asyncio.Queue[rtc.AudioFrame]):
         if not self._listen_task:
-            self._listen_task = asyncio.create_task(self.listen(q))
+            self._listen_task = asyncio.create_task(self.listen(q), name="Rt:listen")
 
     async def listen(self, q: asyncio.Queue[rtc.AudioFrame]):
         stream = rtc.AudioStream(self.publication.track)

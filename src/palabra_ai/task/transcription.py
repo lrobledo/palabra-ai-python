@@ -4,13 +4,16 @@ import asyncio
 import builtins
 from collections.abc import Callable
 from dataclasses import KW_ONLY, dataclass, field
+from functools import partial
 
 from loguru import logger
 
 from palabra_ai.base.message import TranscriptionMessage
 from palabra_ai.base.task import Task
-from palabra_ai.config import Config, SourceLang, TargetLang
+from palabra_ai.config import Config
+from palabra_ai.config import SLEEP_INTERVAL_LONG
 from palabra_ai.task.realtime import Realtime
+from palabra_ai.util.capped_set import CappedSet
 
 
 @dataclass
@@ -19,57 +22,44 @@ class Transcription(Task):
 
     cfg: Config
     rt: Realtime
-    source: SourceLang
-    targets: list[TargetLang]
     _: KW_ONLY
     suppress_callback_errors: bool = True
     _webrtc_queue: asyncio.Queue | None = field(default=None, init=False)
     _callbacks: dict[str, Callable] = field(default_factory=dict, init=False)
+    _dedup: CappedSet[str] = field(default_factory=partial(CappedSet, 100), init=False)
 
     def __post_init__(self):
         # Collect callbacks by language
-        if self.source._on_transcription:
-            self._callbacks[self.source.lang.bcp47] = self.source._on_transcription
+        if self.cfg.source.on_transcription:
+            self._callbacks[self.cfg.source.lang.code] = (
+                self.cfg.source.on_transcription
+            )
 
-        for target in self.targets:
-            if target._on_transcription:
-                self._callbacks[target.lang.bcp47] = target._on_transcription
+        for target in self.cfg.targets:
+            if target.on_transcription:
+                self._callbacks[target.lang.code] = target.on_transcription
 
-    async def run(self):
-        if not self._callbacks:
-            logger.debug("No transcription callbacks configured")
-            +self.ready  # noqa
-            return
-
-        await self.rt.ready
-
-        # Subscribe to webrtc messages
-        self._webrtc_queue = self.rt.c.room.out_foq.subscribe(
-            str(builtins.id(self)), maxsize=0
+    async def boot(self):
+        self._webrtc_queue = self.rt.out_foq.subscribe(
+            self, maxsize=0
         )
-
+        await self.rt.ready
         logger.debug(
             f"Transcription processor started for languages: {list(self._callbacks.keys())}"
         )
-        +self.ready  # noqa
 
-        try:
-            while not self.stopper:
-                try:
-                    packet = await asyncio.wait_for(
-                        self._webrtc_queue.get(), timeout=0.1
-                    )
-                except TimeoutError:
-                    continue
+    async def do(self):
+        while not self.stopper:
+            try:
+                packet = await asyncio.wait_for(self._webrtc_queue.get(), timeout=0.1)
+            except TimeoutError:
+                continue
+            self._webrtc_queue.task_done()
+            # Process message
+            await self._process_message(packet)
 
-                self._webrtc_queue.task_done()
-
-                # Process message
-                await self._process_message(packet)
-
-        except asyncio.CancelledError:
-            logger.debug("Transcription processor cancelled")
-            raise
+    async def exit(self):
+        self.rt.out_foq.unsubscribe(self)
 
     async def _process_message(self, msg):
         """Process a single message and call appropriate callbacks."""
@@ -77,11 +67,13 @@ class Transcription(Task):
             if not isinstance(msg, TranscriptionMessage):
                 return
 
-            callback = self._callbacks.get(msg.language.bcp47)
+            _dedup = msg.dedup
+            if _dedup in self._dedup:
+                return
+            self._dedup.add(_dedup)
+
+            callback = self._callbacks.get(msg.language.code)
             if not callback:
-                logger.debug(
-                    f"No callback configured for language: {msg.language.bcp47}"
-                )
                 return
 
             # Call the callback
@@ -94,7 +86,7 @@ class Transcription(Task):
         """Call a callback, handling both sync and async callbacks."""
         try:
             if asyncio.iscoroutinefunction(callback):
-                asyncio.create_task(callback(data))
+                asyncio.create_task(callback(data), name="Transcription:callback")
                 # await callback(data)
             else:
                 # Run sync callback in executor to not block

@@ -4,11 +4,10 @@ import asyncio
 import io
 from dataclasses import KW_ONLY, dataclass
 
-from loguru import logger
-
-from palabra_ai.adapter._common import run_until_stopped
 from palabra_ai.base.adapter import Reader, Writer
+from palabra_ai.config import SLEEP_INTERVAL_DEFAULT
 from palabra_ai.internal.buffer import AudioBufferWriter
+from palabra_ai.util.logger import debug, error, warning
 
 
 @dataclass
@@ -25,11 +24,17 @@ class BufferReader(Reader):
         self._buffer_size = self.buffer.tell()
         self.buffer.seek(current_pos)
 
-    async def run(self):
-        logger.debug(f"Buffer contains {self._buffer_size} bytes")
-        +self.ready  # noqa
+    async def boot(self):
+        debug(f"{self.name} contains {self._buffer_size} bytes")
 
-        await self._benefit()
+    async def do(self):
+        while not self.stopper and not self.eof:
+            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+
+    async def exit(self):
+        debug(f"{self.name} exiting")
+        if not self.eof:
+            warning(f"{self.name} stopped without reaching EOF")
 
     async def read(self, size: int | None = None) -> bytes | None:
         await self.ready
@@ -40,7 +45,7 @@ class BufferReader(Reader):
 
         if not chunk:
             +self.eof  # noqa
-            logger.debug(f"EOF reached at position {self._position}")
+            debug(f"EOF reached at position {self._position}")
             return None
 
         self._position = self.buffer.tell()
@@ -58,50 +63,22 @@ class BufferWriter(Writer):
         self._buffer_writer = AudioBufferWriter(queue=self.q)
         self._started = False
 
-    async def run(self):
+    async def boot(self):
+        await self._buffer_writer.start()
+        self._transfer_task = self.sub_tg.create_task(
+            self._transfer_audio(), name="Buffer:transfer"
+        )
+
+    async def do(self):
+        while not self.stopper and not self.eof:
+            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+
+    async def exit(self):
         try:
-            await self._buffer_writer.start()
-            self._started = True
-            self._transfer_task = self._tg.create_task(self._transfer_audio())
-            logger.debug("BufferWriter started")
-            +self.ready  # noqa
-
-            await run_until_stopped(self)
-
+            await self._transfer_task
         except asyncio.CancelledError:
-            logger.warning("BufferWriter run cancelled")
-            raise
-        finally:
-            if self._transfer_task:
-                self._transfer_task.cancel()
-                try:
-                    await self._transfer_task
-                except asyncio.CancelledError:
-                    pass
-            await self.finalize()
-
-    async def _transfer_audio(self):
-        try:
-            while True:
-                try:
-                    audio_frame = await self._buffer_writer.queue.get()
-                    if audio_frame is None:
-                        break
-
-                    audio_bytes = audio_frame.data.tobytes()
-                    self.buffer.write(audio_bytes)
-
-                except asyncio.CancelledError:
-                    logger.warning("BufferWriter transfer cancelled")
-                    raise
-                except Exception as e:
-                    logger.error(f"Transfer error: {e}")
-        except asyncio.CancelledError:
-            logger.warning("BufferWriter transfer loop cancelled")
-            raise
-
-    async def finalize(self) -> bytes:
-        logger.debug("Finalizing BufferWriter...")
+            pass
+        debug("Finalizing BufferWriter...")
 
         wav_data = self._buffer_writer.to_wav_bytes()
         if wav_data:
@@ -109,16 +86,32 @@ class BufferWriter(Writer):
             self.buffer.truncate()
             self.buffer.write(wav_data)
             self.buffer.seek(0)
-            logger.debug(f"Generated {len(wav_data)} bytes of WAV data in buffer")
+            debug(f"Generated {len(wav_data)} bytes of WAV data in buffer")
         else:
-            logger.warning("No WAV data generated")
+            warning("No WAV data generated")
 
         return wav_data
 
-    async def cancel(self) -> None:
-        logger.debug("BufferWriter cancelled")
-        self.buffer.seek(0)
-        self.buffer.truncate()
+    async def _transfer_audio(self):
+        try:
+            while True:
+                try:
+                    audio_frame = await self._buffer_writer.queue.get()
+                    if audio_frame is None:
+                        +self.eof  # noqa
+                        return
+
+                    audio_bytes = audio_frame.data.tobytes()
+                    self.buffer.write(audio_bytes)
+
+                except asyncio.CancelledError:
+                    warning("BufferWriter transfer cancelled")
+                    raise
+                except Exception as e:
+                    error(f"Transfer error: {e}")
+        except asyncio.CancelledError:
+            warning("BufferWriter transfer loop cancelled")
+            raise
 
 
 class PipeWrapper:

@@ -1,23 +1,17 @@
-import asyncio
-import io
+# from __future__ import annotations
 from collections.abc import Awaitable, Callable
-from typing import Union
+from typing import TypeAlias
+from typing import Union, TYPE_CHECKING
 
 from palabra_ai.base.message import TranscriptionMessage
+
+if TYPE_CHECKING:
+    from palabra_ai.base.adapter import Reader, Writer
 
 T_ON_TRANSCRIPTION = Union[
     Callable[[TranscriptionMessage], None],
     Callable[[TranscriptionMessage], Awaitable[None]],
 ]
 
-T_IN_PCM = Union[
-    "palabra_ai.base.adapter.Reader",
-    asyncio.Queue,
-    io.BytesIO,
-]
-
-T_OUT_PCM = Union[
-    "palabra_ai.base.adapter.Writer",
-    asyncio.Queue,
-    io.BytesIO,
-]
+T_READER: TypeAlias = "Reader"
+T_WRITER: TypeAlias = "Writer"

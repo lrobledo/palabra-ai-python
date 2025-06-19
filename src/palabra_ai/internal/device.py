@@ -65,7 +65,9 @@ class InputSoundDevice:
         )
         self.device_reading_thread.start()
 
-        self.callback_task = asyncio.create_task(self._run_callback_worker())
+        self.callback_task = asyncio.create_task(
+            self._run_callback_worker(), name="Device:listen"
+        )
 
         logger.info(f"Starting reading device: {self.name}")
 

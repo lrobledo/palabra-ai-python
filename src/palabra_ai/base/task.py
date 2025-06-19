@@ -3,9 +3,9 @@ import asyncio
 from dataclasses import KW_ONLY, dataclass, field
 
 import loguru
-from loguru import logger as l
 
-from palabra_ai.util.logger import debug
+from palabra_ai.util.emoji import Emoji
+from palabra_ai.util.logger import debug, error
 
 
 class TaskEvent(asyncio.Event):
@@ -50,60 +50,75 @@ class TaskEvent(asyncio.Event):
 @dataclass
 class Task(abc.ABC):
     _: KW_ONLY
-    _tg: asyncio.TaskGroup = field(default=None, init=False, repr=False)
+    root_tg: asyncio.TaskGroup = field(default=None, init=False, repr=False)
+    sub_tg: asyncio.TaskGroup = field(
+        default_factory=asyncio.TaskGroup, init=False, repr=False
+    )
     _task: asyncio.Task = field(default=None, init=False, repr=False)
     _name: str | None = field(default=None, init=False, repr=False)
     ready: TaskEvent = field(default_factory=TaskEvent, init=False)
-    stopper: TaskEvent | None = field(default=None, init=False, repr=False)
+    eof: TaskEvent = field(default_factory=TaskEvent, init=False)
+    stopper: TaskEvent = field(default_factory=TaskEvent)
+    _state: list[str] = field(default_factory=list, init=False, repr=False)
 
-    def __call__(
-        self, tg: asyncio.TaskGroup, stopper: TaskEvent | None = None
-    ) -> "Task":
-        self._tg = tg
-        self.stopper = stopper
-        self.ready.set_owner(f"{self.__class__.__name__}.ready")
-        l.debug(f"{self.name} starting...")
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+
+    def __call__(self, tg: asyncio.TaskGroup) -> "Task":
+        self.root_tg = tg
+        self.ready.set_owner(f"{self.name}.ready")
+        self.eof.set_owner(f"{self.name}.eof")
+        self.stopper.set_owner(f"{self.name}.stopper")
         self._task = tg.create_task(self.run(), name=self.name)
         return self
 
     async def run(self):
+        self._state.append("🚀")
         try:
-            debug(f"{self.name} starting...")
-            await self._boot()
-            +self.ready  # noqa
-            debug(f"{self.name} ready, doing...")
-            await self.do()
-            debug(f"{self.name} done, exiting...")
-            await self.exit()
-            debug(f"{self.name} exited successfully")
-            return
+            async with self.sub_tg:
+                debug(f"{self.name} starting...")
+                self._state.append("🌀")
+                await self._boot()
+                self._state.append("🟢")
+                +self.ready  # noqa
+                debug(f"{self.name} ready, doing...")
+                self._state.append("💫")
+                await self.do()
+                self._state.append("🎉")
+                debug(f"{self.name} done, exiting...")
         except asyncio.CancelledError:
+            self._state.append("🚫")
             debug(f"{self.name} cancelled, exiting...")
-            await self.fail()
             raise
         except Exception as e:
-            l.error(f"{self.name} failed with error: {e}")
-            await self.fail()
+            self._state.append("💥")
+            error(f"{self.name} failed with error: {e}")
             raise
+        finally:
+            self._state.append("👋")
+            result = await self._exit()
+            self._state.append("🔴")
+            debug(f"{self.name} exited successfully")
+        return result
 
     async def _boot(self):
         return await self.boot()
 
+    @abc.abstractmethod
     async def boot(self):
         raise NotImplementedError()
 
+    @abc.abstractmethod
     async def do(self):
         raise NotImplementedError()
 
+    @abc.abstractmethod
     async def exit(self):
         raise NotImplementedError()
 
     async def _exit(self):
         +self.stopper  # noqa
         return await self.exit()
-
-    async def fail(self):
-        return await self._exit()
 
     @property
     def name(self) -> str:
@@ -118,3 +133,12 @@ class Task(abc.ABC):
         if not self._task:
             raise RuntimeError(f"{self.name} task not set. Call the process first")
         return self._task
+
+    def __str__(self):
+        ready = Emoji.bool(self.ready)
+        stopper = Emoji.bool(self.stopper)
+        eof = Emoji.bool(self.eof)
+        states = " ".join(self._state) if self._state else "⭕"
+        return (
+            f"{self.name:>28}(ready={ready}, stopper={stopper}, eof={eof}, states={states})"
+        )
