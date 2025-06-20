@@ -6,10 +6,13 @@ import os
 import signal
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from dataclasses import field
 
 from aioshutdown import SIGHUP, SIGINT, SIGTERM
 
 from palabra_ai.base.task import TaskEvent
+from palabra_ai.config import CLIENT_ID
+from palabra_ai.config import CLIENT_SECRET
 from palabra_ai.config import DEEP_DEBUG, Config
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
@@ -20,18 +23,15 @@ from palabra_ai.util.logger import debug, error, warning
 
 @dataclass
 class PalabraAI:
-    api_key: str | None = None
-    api_secret: str | None = None
+    client_id: str | None = field(default=CLIENT_ID)
+    client_secret: str | None = field(default=CLIENT_SECRET)
     api_endpoint: str = "https://api.palabra.ai"
 
     def __post_init__(self):
-        self.api_key = self.api_key or os.getenv("PALABRA_API_KEY")
-        if not self.api_key:
-            raise ConfigurationError("PALABRA_API_KEY is not set")
-
-        self.api_secret = self.api_secret or os.getenv("PALABRA_API_SECRET")
-        if not self.api_secret:
-            raise ConfigurationError("PALABRA_API_SECRET is not set")
+        if not self.client_id:
+            raise ConfigurationError("PALABRA_CLIENT_ID is not set")
+        if not self.client_secret:
+            raise ConfigurationError("PALABRA_CLIENT_SECRET is not set")
 
     def run(self, cfg: Config, stopper: TaskEvent | None = None) -> None:
         async def _run():
@@ -96,8 +96,8 @@ class PalabraAI:
             stopper = TaskEvent()
 
         credentials = await PalabraRESTClient(
-            self.api_key,
-            self.api_secret,
+            self.client_id,
+            self.client_secret,
             base_url=self.api_endpoint,
         ).create_session()
 

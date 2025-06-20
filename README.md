@@ -14,12 +14,8 @@ Python SDK for Palabra AI's real-time speech-to-speech translation API. Break do
 
 ## Overview
 
-The Palabra AI SDK enables you to integrate real-time speech translation into your Python applications. Whether you're building a new application, enhancing an existing product, or streamlining business processes, this SDK gives you the tools to:
+The Palabra AI Python SDK provides a high-level API for integrating real-time speech-to-speech translation into your Python applications. While the Palabra.ai platform offers comprehensive features like voice cloning, text-to-speech, and audio/video dubbing, this SDK specifically focuses on making real-time translation simple and accessible. Using WebRTC and WebSockets under the hood, the SDK abstracts away all complexity — you just configure your source and target languages with input/output adapters, and the SDK handles the entire pipeline: session management, connection to Palabra translation rooms, audio streaming, and language processing. Your speech is automatically transcribed, translated, and synthesized into the target language in real-time, delivering an audio stream ready for immediate playback with just a few lines of code.
 
-- **Real-Time Speech-to-Speech Translation**: Instantly translate live speech, making conversations feel smooth and natural
-- **Voice Cloning & Management**: Preserve the original speaker's voice and emotional nuances in translated speech
-- **Text-to-Speech Conversion**: Convert written text into natural-sounding speech in multiple languages
-- **Audio & Video Dubbing**: Automate content dubbing to reach global audiences
 
 ## Installation
 
@@ -387,6 +383,12 @@ from palabra_ai import (
 - ✅ PyPI publication (coming soon)
 - ⏳ Code coverage reporting (setup required)
 - ⏳ Documentation site (coming soon)
+
+### Current Dev Roadmap
+- ⏳ TODO: global timeout support for long-running tasks
+- ⏳ TODO: support for multiple source languages in a single run
+- ⏳ TODO: fine cancelling on cancel_all_tasks()
+- ⏳ TODO: error handling improvements
 
 ### Build Status
 - **Tests**: Running on Python 3.11, 3.12, 3.13

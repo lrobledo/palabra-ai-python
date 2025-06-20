@@ -50,6 +50,8 @@ if TYPE_CHECKING:
 
 env = Env(prefix="PALABRA_")
 env.read_env()
+CLIENT_ID = env.str("CLIENT_ID", default=None)
+CLIENT_SECRET = env.str("CLIENT_SECRET", default=None)
 SILENT = env.bool("SILENT", default=False)
 DEBUG = env.bool("DEBUG", default=False)
 DEEP_DEBUG = env.bool("DEEP_DEBUG", default=False)
