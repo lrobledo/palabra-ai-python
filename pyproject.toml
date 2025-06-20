@@ -64,10 +64,23 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+addopts = [
+    "--cov=palabra_ai",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-branch",
+    "--cov-fail-under=50",
+]
 
 [tool.coverage.run]
 source = ["palabra_ai"]
-omit = ["*/tests/*", "*/test_*.py"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/experimental/*",
+    "*/examples/*",
+    "*/scripts/*"
+    ]
 
 [tool.coverage.report]
 exclude_lines = [

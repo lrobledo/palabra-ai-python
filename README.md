@@ -403,7 +403,6 @@ from palabra_ai import (
 ## Support
 
 - Documentation: [https://docs.palabra.ai](https://docs.palabra.ai)
-- API Reference: [https://docs.palabra.ai/api](https://docs.palabra.ai/api)
 - Issues: [GitHub Issues](https://github.com/PalabraAI/palabra-ai-python/issues)
 - Email: info@palabra.ai
 
