@@ -1,0 +1,14 @@
+coverage:
+  status:
+    project:
+      default:
+        paths:
+          - "src/*"
+        ignore:
+          - "src/palabra_ai/experimental/**/*"
+    patch:
+      default:
+        paths:
+          - "src/*"
+        ignore:
+          - "src/palabra_ai/experimental/**/*"
