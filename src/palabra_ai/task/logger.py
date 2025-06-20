@@ -72,12 +72,20 @@ class Logger(Task):
         except BaseException as e:
             sysinfo = {"error": str(e)}
 
+        # Convert Config to dict to avoid circular references
+        cfg_dict = {
+            "log_file": str(self.cfg.log_file),
+            "trace_file": str(self.cfg.trace_file),
+            "debug": self.cfg.debug,
+            # Add other necessary config fields as needed
+        }
+
         json_data = {
             "version": getattr(palabra_ai, "__version__", "n/a"),
             "sysinfo": sysinfo,
             "messages": self._messages,
             "start_ts": self._start_ts,
-            "cfg": self.cfg,
+            "cfg": cfg_dict,
             "log_file": str(self.cfg.log_file),
             "trace_file": str(self.cfg.trace_file),
             "debug": self.cfg.debug,
@@ -93,9 +101,11 @@ class Logger(Task):
         self.rt.out_foq.unsubscribe(self)
 
         debug(f"{self.name} tasks cancelled, waiting for completion...")
+        # Use return_exceptions=True to handle CancelledError gracefully
         await asyncio.gather(
             asyncio.wait_for(self._in_task, timeout=SHUTDOWN_TIMEOUT),
             asyncio.wait_for(self._out_task, timeout=SHUTDOWN_TIMEOUT),
+            return_exceptions=True
         )
         debug(f"{self.name} tasks completed")
 

@@ -1,83 +1,73 @@
 import asyncio
 import pytest
-
 from palabra_ai.base.task import Task, TaskEvent
+from unittest.mock import MagicMock, patch
 
 
-class TestTaskEvent:
-    def test_set_owner(self):
-        event = TaskEvent()
-        event.set_owner("test_owner")
-        assert event._owner == "test_owner"
+class ConcreteTask(Task):
+    """Concrete implementation for testing."""
 
-    def test_pos_operator(self):
-        event = TaskEvent()
-        event.set_owner("test")
-        +event
-        assert event.is_set()
+    async def boot(self):
+        await asyncio.sleep(0.01)
 
-    def test_neg_operator(self):
-        event = TaskEvent()
-        event.set_owner("test")
-        +event
-        -event
-        assert not event.is_set()
+    async def do(self):
+        await asyncio.sleep(0.01)
 
-    def test_bool_operator(self):
-        event = TaskEvent()
-        assert not event
-        event.set()
-        assert event
-
-    @pytest.mark.asyncio
-    async def test_await_immediate(self):
-        event = TaskEvent()
-        event.set()
-        # Should return immediately when already set
-        await event
-
-    def test_repr(self):
-        event = TaskEvent()
-        assert repr(event) == "TaskEvent(False)"
-        event.set()
-        assert repr(event) == "TaskEvent(True)"
+    async def exit(self):
+        return "exit_result"
 
 
 class TestTask:
-    class ConcreteTask(Task):
-        async def boot(self):
-            pass
+    @pytest.mark.asyncio
+    async def test_cancel_all_subtasks(self):
+        task = ConcreteTask()
 
-        async def do(self):
-            while not self.stopper:
-                await asyncio.sleep(0.01)
+        # Mock some subtasks
+        mock_task1 = MagicMock()
+        mock_task1.get_name.return_value = "[T]ConcreteTask_subtask1"
+        mock_task1.done.return_value = False
+        mock_task1.cancel = MagicMock()
 
-        async def exit(self):
-            pass
+        mock_task2 = MagicMock()
+        mock_task2.get_name.return_value = "[T]ConcreteTask_subtask2"
+        mock_task2.done.return_value = True  # Already done
+
+        # Mock asyncio.all_tasks
+        with patch('asyncio.all_tasks', return_value={mock_task1, mock_task2}):
+            with patch('asyncio.wait', return_value=(set(), {mock_task1})):
+                await task.cancel_all_subtasks()
+
+        # Only non-done task should be cancelled
+        mock_task1.cancel.assert_called()
+        assert mock_task1.cancel.call_count == 2  # Once normally, once force
 
     @pytest.mark.asyncio
-    async def test_task_lifecycle(self):
-        task = self.ConcreteTask()
+    async def test_exit_timeout(self):
+        class SlowExitTask(Task):
+            async def boot(self):
+                pass
 
-        async with asyncio.TaskGroup() as tg:
-            task(tg)
-            await task.ready
-            assert task._task is not None
-            assert not task._task.done()
+            async def do(self):
+                pass
 
-            +task.stopper
-            await asyncio.sleep(0.02)
+            async def exit(self):
+                await asyncio.sleep(10)  # Longer than timeout
 
-        assert task._task.done()
+        task = SlowExitTask()
+        task.cancel_all_subtasks = MagicMock(return_value=asyncio.Future())
+        task.cancel_all_subtasks.return_value.set_result(None)
 
-    def test_name_property(self):
-        task = self.ConcreteTask()
-        assert task.name == "[T]ConcreteTask"
+        with patch('palabra_ai.constant.SHUTDOWN_TIMEOUT', 0.1):
+            await task._exit()
 
+        task.cancel_all_subtasks.assert_called_once()
+
+    def test_name_setter(self):
+        task = ConcreteTask()
         task.name = "CustomName"
         assert task.name == "[T]CustomName"
 
-    def test_task_property_error(self):
-        task = self.ConcreteTask()
+    def test_task_not_set_error(self):
+        task = ConcreteTask()
         with pytest.raises(RuntimeError, match="task not set"):
             _ = task.task

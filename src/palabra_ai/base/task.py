@@ -74,6 +74,7 @@ class Task(abc.ABC):
 
     async def run(self):
         self._state.append("🚀")
+        caught_exception = None
         try:
             async with self.sub_tg:
                 try:
@@ -88,14 +89,18 @@ class Task(abc.ABC):
                     self._state.append("🎉")
                     debug(f"{self.name}.run() done, exiting...")
                     +self.stopper  # noqa
-                except asyncio.CancelledError:
+                except asyncio.CancelledError as e:
                     self._state.append("🚫")
                     debug(f"{self.name}.run() cancelled, exiting...")
+                    caught_exception = e
                     raise
                 except Exception as e:
                     self._state.append("💥")
                     error(f"{self.name}.run() failed with error: {e}, exiting...")
+                    caught_exception = e
                     raise
+        except (asyncio.CancelledError, Exception) as e:
+            caught_exception = e
         finally:
             +self.stopper  # noqa
             self._state.append("👋")
@@ -103,6 +108,9 @@ class Task(abc.ABC):
             result = await self._exit()
             self._state.append("🟠")
             debug(f"{self.name}.run() exited successfully!")
+
+        if caught_exception:
+            raise caught_exception
         return result
 
     async def _boot(self):
