@@ -1,0 +1,20 @@
+[project]
+name = "nanopalabra"
+version = "1.0.0"
+description = "Minimal Python client for Palabra AI real-time speech translation - capture mic audio, translate to multiple languages, and play back translated speech via WebRTC"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28,<0.29",
+    "livekit>=1.0,<2.0",
+    "numpy>=2.3,<3.0",
+    "sounddevice>=0.5,<0.6",
+    "websockets>=15.0,<16.0",
+]
+
+[project.scripts]
+nanopalabra = "nanopalabra:main"
+
+[project.urls]
+Repository = "https://github.com/PalabraAI/palabra-ai-python/tree/main/examples/nanopalabra"
+Documentation = "https://docs.palabra.ai/docs/quick-start"
