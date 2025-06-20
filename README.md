@@ -1,4 +1,4 @@
-# Palabra AI Python SDK
+# <a href="https://palabra.ai"><img src="https://avatars.githubusercontent.com/u/199107821?s=32" alt="Palabra AI" align="center"></a> Palabra AI Python SDK
 
 [![Tests](https://github.com/PalabraAI/palabra-ai-python/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/PalabraAI/palabra-ai-python/actions/workflows/test.yml)
 [![Release](https://github.com/PalabraAI/palabra-ai-python/actions/workflows/release.yml/badge.svg)](https://github.com/PalabraAI/palabra-ai-python/actions/workflows/release.yml)
@@ -10,23 +10,47 @@
 
 [//]: # ([![codecov]&#40;https://codecov.io/gh/PalabraAI/palabra-ai-python/graph/badge.svg?token=HRQAJ5VFY7&#41;]&#40;https://codecov.io/gh/PalabraAI/palabra-ai-python&#41;)
 
-Python SDK for Palabra AI's real-time speech-to-speech translation API. Break down language barriers and enable seamless communication across 25+ languages.
+🌍 **Python SDK for Palabra AI's real-time speech-to-speech translation API**  
+🚀 Break down language barriers and enable seamless communication across 25+ languages
 
-## Overview
+## Overview 📋
 
-The Palabra AI Python SDK provides a high-level API for integrating real-time speech-to-speech translation into your Python applications. While the Palabra.ai platform offers comprehensive features like voice cloning, text-to-speech, and audio/video dubbing, this SDK specifically focuses on making real-time translation simple and accessible. Using WebRTC and WebSockets under the hood, the SDK abstracts away all complexity — you just configure your source and target languages with input/output adapters, and the SDK handles the entire pipeline: session management, connection to Palabra translation rooms, audio streaming, and language processing. Your speech is automatically transcribed, translated, and synthesized into the target language in real-time, delivering an audio stream ready for immediate playback with just a few lines of code.
+🎯 **The Palabra AI Python SDK provides a high-level API for integrating real-time speech-to-speech translation into your Python applications.**
+
+✨ **What can Palabra.ai do?**
+- ⚡ Real-time speech-to-speech translation with near-zero latency
+- 🎙️ Auto voice cloning - speak any language in YOUR voice
+- 🌍 30+ languages with emotion transfer
+- 🔄 Two-way simultaneous translation for live discussions
+- 🚀 Developer API/SDK for building your own apps
+- 🎯 Works everywhere - Zoom, streams, events, any platform
+- 🔒 Zero data storage - your conversations stay private
 
 
-## Installation
+🔧 **This SDK focuses on making real-time translation simple and accessible:**
+- 🛡️ Uses WebRTC and WebSockets under the hood
+- ⚡ Abstracts away all complexity
+- 🎮 Simple configuration with source/target languages
+- 🎤 Supports various input/output adapters (microphones, speakers, files, buffers)
 
-### From PyPI (Coming Soon)
+📊 **How it works:**
+1. 🎤 Configure input/output adapters
+2. 🔄 SDK handles the entire pipeline
+3. 🎯 Automatic transcription, translation, and synthesis
+4. 🔊 Real-time audio stream ready for playback
+
+💡 **All this with just a few lines of code!**
+
+## Installation 📦
+
+### From PyPI 📦
 ```bash
 pip install palabra-ai
 ```
 
-## Quick Start
+## Quick Start 🚀
 
-### Real-time microphone translation
+### Real-time microphone translation 🎤
 
 ```python
 from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
@@ -39,15 +63,15 @@ cfg = Config(SourceLang(EN, mic), [TargetLang(ES, speaker)])
 palabra.run(cfg)
 ```
 
-Set your API credentials as environment variables:
+⚙️ **Set your API credentials as environment variables:**
 ```bash
 export PALABRA_API_KEY=your_api_key
 export PALABRA_API_SECRET=your_api_secret
 ```
 
-## Examples
+## Examples 💡
 
-### File-to-file translation
+### File-to-file translation 📁
 
 ```python
 from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
@@ -60,7 +84,7 @@ cfg = Config(SourceLang(ES, reader), [TargetLang(EN, writer)])
 palabra.run(cfg)
 ```
 
-### Multiple target languages
+### Multiple target languages 🌐
 
 ```python
 from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
@@ -78,9 +102,13 @@ config = Config(
 palabra.run(config)
 ```
 
-### Working with transcriptions
+### Working with transcriptions 📝
 
-You can optionally get transcriptions of the source and translated speech. Output can be configured to provide audio only, transcriptions only, or both:
+📋 **You can optionally get transcriptions of the source and translated speech.**  
+⚙️ **Output can be configured to provide:**
+- 🔊 Audio only
+- 📝 Transcriptions only
+- 🎯 Both audio and transcriptions
 
 ```python
 from palabra_ai import (
@@ -121,26 +149,27 @@ cfg = Config(
 palabra.run(cfg)
 ```
 
-#### Transcription output options:
+#### Transcription output options: 📊
 
-1. **Audio only** (default):
+1️⃣ **Audio only** (default):
 ```python
 TargetLang(ES, FileWriter("output.wav"))
 ```
 
-2. **Transcription only**:
+2️⃣ **Transcription only**:
 ```python
 TargetLang(ES, on_transcription=your_callback_function)
 ```
 
-3. **Both audio and transcription**:
+3️⃣ **Both audio and transcription**:
 ```python
 TargetLang(ES, FileWriter("output.wav"), on_transcription=your_callback_function)
 ```
 
-The transcription callbacks receive `TranscriptionMessage` objects containing the transcribed text and metadata. Callbacks can be either synchronous or asynchronous functions.
+💡 **The transcription callbacks receive `TranscriptionMessage` objects containing the transcribed text and metadata.**  
+🔄 **Callbacks can be either synchronous or asynchronous functions.**
 
-### Integration with FFmpeg (streaming)
+### Integration with FFmpeg (streaming) 🎬
 
 ```python
 import io
@@ -171,7 +200,7 @@ with open("./ar2en_out.wav", "wb") as f:
     f.write(es_buffer.getbuffer())
 ```
 
-### Using buffers
+### Using buffers 💾
 
 ```python
 import io
@@ -192,7 +221,7 @@ with open("./ar2en_out.wav", "wb") as f:
     f.write(es_buffer.getbuffer())
 ```
 
-### Using default audio devices
+### Using default audio devices 🔊
 
 ```python
 from palabra_ai import PalabraAI, Config, SourceLang, TargetLang, DeviceManager, EN, ES
@@ -209,7 +238,7 @@ if reader and writer:
     palabra.run(config)
 ```
 
-### Async API
+### Async API ⚡
 
 ```python
 import asyncio
@@ -226,35 +255,39 @@ async def translate():
 asyncio.run(translate())
 ```
 
-## I/O Adapters & Mixing
+## I/O Adapters & Mixing 🔌
 
-The SDK provides flexible I/O adapters that can be mixed in any combination:
+🎯 **The SDK provides flexible I/O adapters that can be mixed in any combination:**
 
-### Available Adapters
+### Available Adapters 🛠️
 
-- **FileReader/FileWriter**: Read from and write to audio files
-- **DeviceReader/DeviceWriter**: Use microphones and speakers
-- **BufferReader/BufferWriter**: Work with in-memory buffers
-- **RunAsPipe**: Run command and represent as pipe (e.g., FFmpeg stdout)
+- 📁 **FileReader/FileWriter**: Read from and write to audio files
+- 🎤 **DeviceReader/DeviceWriter**: Use microphones and speakers
+- 💾 **BufferReader/BufferWriter**: Work with in-memory buffers
+- 🔧 **RunAsPipe**: Run command and represent as pipe (e.g., FFmpeg stdout)
 
-### Mixing Examples
+### Mixing Examples 🎨
 
-You can combine any input adapter with any output adapter:
+🔄 **You can combine any input adapter with any output adapter:**
 
+#### 🎤➡️📁 Microphone to file - record translations
 ```python
-# Microphone to file - record translations
 config = Config(
     source=SourceLang(EN, mic),
     targets=[TargetLang(ES, FileWriter("recording_es.wav"))]
 )
+```
 
-# File to speaker - play translations
+#### 📁➡️🔊 File to speaker - play translations
+```python
 config = Config(
     source=SourceLang(EN, FileReader("presentation.mp3")),
     targets=[TargetLang(ES, speaker)]
 )
+```
 
-# Microphone to multiple outputs - real-time translation with recording
+#### 🎤➡️🔊📁 Microphone to multiple outputs
+```python
 config = Config(
     source=SourceLang(EN, mic),
     targets=[
@@ -263,8 +296,10 @@ config = Config(
         TargetLang(FR, FileWriter("french.wav"))    # Save French to file
     ]
 )
+```
 
-# Buffer to buffer - for integration with other systems
+#### 💾➡️💾 Buffer to buffer - for integration
+```python
 input_buffer = io.BytesIO(audio_data)
 output_buffer = io.BytesIO()
 
@@ -272,38 +307,29 @@ config = Config(
     source=SourceLang(EN, BufferReader(input_buffer)),
     targets=[TargetLang(ES, BufferWriter(output_buffer))]
 )
+```
 
-# FFmpeg pipe to speaker - stream processing
+#### 🔧➡️🔊 FFmpeg pipe to speaker
+```python
 pipe = RunAsPipe(ffmpeg_process.stdout)
 config = Config(
     source=SourceLang(EN, BufferReader(pipe)),
     targets=[TargetLang(ES, speaker)]
 )
-
-# File to multiple speakers (if you have multiple audio devices)
-dm = DeviceManager()
-speaker1 = dm.get_speaker_by_name("Speaker 1")
-speaker2 = dm.get_speaker_by_name("Speaker 2")
-
-config = Config(
-    source=SourceLang(EN, FileReader("input.mp3")),
-    targets=[
-        TargetLang(ES, speaker1),  # Spanish on speaker 1
-        TargetLang(FR, speaker2)   # French on speaker 2
-    ]
-)
 ```
 
-## Features
+## Features ✨
 
-### Real-time Translation
-Translate audio streams in real-time with minimal latency. Perfect for live conversations, conferences, and meetings.
+### Real-time Translation ⚡
+🎯 Translate audio streams in real-time with minimal latency  
+💬 Perfect for live conversations, conferences, and meetings
 
-### Voice Cloning
-Preserve the original speaker's voice characteristics in translations by enabling voice cloning in the configuration.
+### Voice Cloning 🗣️
+🎭 Preserve the original speaker's voice characteristics in translations  
+⚙️ Enable voice cloning in the configuration
 
-### Device Management
-Easy device selection with interactive prompts or programmatic access:
+### Device Management 🎮
+🎤 Easy device selection with interactive prompts or programmatic access:
 
 ```python
 dm = DeviceManager()
@@ -320,15 +346,15 @@ input_devices = dm.get_input_devices()
 output_devices = dm.get_output_devices()
 ```
 
-## Supported Languages
+## Supported Languages 🌍
 
-### Speech Recognition Languages
+### Speech Recognition Languages 🎤
 🇸🇦 Arabic (AR), 🇨🇳 Chinese (ZH), 🇨🇿 Czech (CS), 🇩🇰 Danish (DA), 🇳🇱 Dutch (NL), 🇬🇧 English (EN), 🇫🇮 Finnish (FI), 🇫🇷 French (FR), 🇩🇪 German (DE), 🇬🇷 Greek (EL), 🇮🇱 Hebrew (HE), 🇭🇺 Hungarian (HU), 🇮🇹 Italian (IT), 🇯🇵 Japanese (JA), 🇰🇷 Korean (KO), 🇵🇱 Polish (PL), 🇵🇹 Portuguese (PT), 🇷🇺 Russian (RU), 🇪🇸 Spanish (ES), 🇹🇷 Turkish (TR), 🇺🇦 Ukrainian (UK)
 
-### Translation Languages
+### Translation Languages 🔄
 🇸🇦 Arabic (AR), 🇧🇬 Bulgarian (BG), 🇨🇳 Chinese Mandarin (ZH), 🇨🇿 Czech (CS), 🇩🇰 Danish (DA), 🇳🇱 Dutch (NL), 🇬🇧 English UK (EN_GB), 🇺🇸 English US (EN_US), 🇫🇮 Finnish (FI), 🇫🇷 French (FR), 🇩🇪 German (DE), 🇬🇷 Greek (EL), 🇮🇱 Hebrew (HE), 🇭🇺 Hungarian (HU), 🇮🇩 Indonesian (ID), 🇮🇹 Italian (IT), 🇯🇵 Japanese (JA), 🇰🇷 Korean (KO), 🇵🇱 Polish (PL), 🇵🇹 Portuguese (PT), 🇧🇷 Portuguese Brazilian (PT_BR), 🇷🇴 Romanian (RO), 🇷🇺 Russian (RU), 🇸🇰 Slovak (SK), 🇪🇸 Spanish (ES), 🇲🇽 Spanish Mexican (ES_MX), 🇸🇪 Swedish (SV), 🇹🇷 Turkish (TR), 🇺🇦 Ukrainian (UK), 🇻🇳 Vietnamese (VN)
 
-### Available Language Constants
+### Available Language Constants 📚
 
 ```python
 from palabra_ai import (
@@ -373,9 +399,9 @@ from palabra_ai import (
 )
 ```
 
-## Development Status
+## Development Status 🛠️
 
-### Current Status
+### Current Status ✅
 - ✅ Core SDK functionality
 - ✅ GitHub Actions CI/CD
 - ✅ Docker packaging
@@ -384,32 +410,32 @@ from palabra_ai import (
 - ⏳ Code coverage reporting (setup required)
 - ⏳ Documentation site (coming soon)
 
-### Current Dev Roadmap
+### Current Dev Roadmap 🗺️
 - ⏳ TODO: global timeout support for long-running tasks
 - ⏳ TODO: support for multiple source languages in a single run
 - ⏳ TODO: fine cancelling on cancel_all_tasks()
 - ⏳ TODO: error handling improvements
 
-### Build Status
-- **Tests**: Running on Python 3.11, 3.12, 3.13
-- **Release**: Automated releases with Docker images
-- **Coverage**: Tests implemented, reporting setup needed
+### Build Status 🏗️
+- 🧪 **Tests**: Running on Python 3.11, 3.12, 3.13
+- 📦 **Release**: Automated releases with Docker images
+- 📊 **Coverage**: Tests implemented, reporting setup needed
 
-## Requirements
+## Requirements 📋
 
-- Python 3.11+
-- Palabra AI API credentials (get them at [palabra.ai](https://palabra.ai))
+- 🐍 Python 3.11+
+- 🔑 Palabra AI API credentials (get them at [palabra.ai](https://palabra.ai))
 
-## Support
+## Support 🤝
 
-- Documentation: [https://docs.palabra.ai](https://docs.palabra.ai)
-- Issues: [GitHub Issues](https://github.com/PalabraAI/palabra-ai-python/issues)
-- Email: info@palabra.ai
+- 📚 Documentation: [https://docs.palabra.ai](https://docs.palabra.ai)
+- 🐛 Issues: [GitHub Issues](https://github.com/PalabraAI/palabra-ai-python/issues)
+- 📧 Email: info@palabra.ai
 
-## License
+## License 📄
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-© Palabra.ai, 2025 | Breaking down language barriers with AI
+© Palabra.ai, 2025 | 🌍 Breaking down language barriers with AI 🚀
