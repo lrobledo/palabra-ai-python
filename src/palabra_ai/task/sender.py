@@ -7,13 +7,12 @@ from typing import TYPE_CHECKING, Any
 from palabra_ai.base.adapter import Reader
 from palabra_ai.base.task import Task
 from palabra_ai.config import (
-    SAFE_PUBLICATION_END_DELAY,
-    TRACK_CLOSE_TIMEOUT,
     Config,
 )
+from palabra_ai.constant import SAFE_PUBLICATION_END_DELAY, TRACK_CLOSE_TIMEOUT
 from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.task.realtime import Realtime
-from palabra_ai.util.logger import debug
+from palabra_ai.util.logger import debug, error, warning
 
 if TYPE_CHECKING:
     pass
@@ -55,9 +54,26 @@ class SenderSourceAudio(Task):
             self.bytes_sent += len(chunk)
             await self._track.push(chunk)
 
+    async def _exit(self):
+        try:
+            debug(f"{self.name}._exit()/proto exit() called, waiting for exit...")
+            return await asyncio.wait_for(
+                self.exit(), timeout=SAFE_PUBLICATION_END_DELAY
+            )
+        except TimeoutError:
+            error(
+                f"{self.name}.exit()/proto timed out after {SAFE_PUBLICATION_END_DELAY}s"
+            )
+            # Cancel all subtasks
+            await self.cancel_all_subtasks()
+            warning(f"{self.name}.exit()/proto all subtasks cancelled")
+
     async def exit(self):
         if self._track:
             try:
+                debug(
+                    f"T{self.name}: WAITING FOR {SAFE_PUBLICATION_END_DELAY=} seconds"
+                )
                 await asyncio.sleep(SAFE_PUBLICATION_END_DELAY)
             except asyncio.CancelledError:
                 debug(f"T{self.name}: Cancelled during publication end delay")

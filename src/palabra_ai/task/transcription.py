@@ -5,13 +5,13 @@ from collections.abc import Callable
 from dataclasses import KW_ONLY, dataclass, field
 from functools import partial
 
-from loguru import logger
-
-from palabra_ai.base.message import TranscriptionMessage
+from palabra_ai.base.message import Message, TranscriptionMessage
 from palabra_ai.base.task import Task
 from palabra_ai.config import Config
+from palabra_ai.constant import SLEEP_INTERVAL_DEFAULT
 from palabra_ai.task.realtime import Realtime
 from palabra_ai.util.capped_set import CappedSet
+from palabra_ai.util.logger import debug, error
 
 
 @dataclass
@@ -40,27 +40,29 @@ class Transcription(Task):
     async def boot(self):
         self._webrtc_queue = self.rt.out_foq.subscribe(self, maxsize=0)
         await self.rt.ready
-        logger.debug(
+        debug(
             f"Transcription processor started for languages: {list(self._callbacks.keys())}"
         )
 
     async def do(self):
         while not self.stopper:
             try:
-                packet = await asyncio.wait_for(self._webrtc_queue.get(), timeout=0.1)
-                if packet is None:
-                    logger.debug("Received None from WebRTC queue, stopping...")
+                rt_msg = await asyncio.wait_for(
+                    self._webrtc_queue.get(), timeout=SLEEP_INTERVAL_DEFAULT
+                )
+                if rt_msg is None:
+                    debug("Received None from WebRTC queue, stopping...")
                     break
             except TimeoutError:
                 continue
             self._webrtc_queue.task_done()
             # Process message
-            await self._process_message(packet)
+            await self._process_message(rt_msg.msg)
 
     async def exit(self):
         self.rt.out_foq.unsubscribe(self)
 
-    async def _process_message(self, msg):
+    async def _process_message(self, msg: Message):
         """Process a single message and call appropriate callbacks."""
         try:
             if not isinstance(msg, TranscriptionMessage):
@@ -79,7 +81,7 @@ class Transcription(Task):
             await self._call_callback(callback, msg)
 
         except Exception as e:
-            logger.error(f"Error processing transcription message: {e}")
+            error(f"Error processing transcription message: {e}")
 
     async def _call_callback(self, callback: Callable, data: TranscriptionMessage):
         """Call a callback, handling both sync and async callbacks."""
@@ -94,6 +96,6 @@ class Transcription(Task):
 
         except Exception as e:
             if self.suppress_callback_errors:
-                logger.error(f"Error in transcription callback: {e}")
+                error(f"Error in transcription callback: {e}")
             else:
                 raise

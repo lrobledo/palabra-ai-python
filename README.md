@@ -33,21 +33,14 @@ pip install palabra-ai
 ### Real-time microphone translation
 
 ```python
-from palabra_ai import PalabraAI, Config, SourceLang, TargetLang, DeviceManager, EN, ES
+from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
+                        EN, ES, DeviceManager)
 
-# Initialize and select audio devices
 palabra = PalabraAI()
-devman = DeviceManager()
-mic, speaker = devman.select_devices_interactive()
-
-# Configure real-time translation
-config = Config(
-    source=SourceLang(EN, mic),
-    targets=[TargetLang(ES, speaker)]
-)
-
-# Start translating
-palabra.run(config)
+dm = DeviceManager()
+mic, speaker = dm.select_devices_interactive()
+cfg = Config(SourceLang(EN, mic), [TargetLang(ES, speaker)])
+palabra.run(cfg)
 ```
 
 Set your API credentials as environment variables:
@@ -65,17 +58,19 @@ from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
                         FileReader, FileWriter, EN, ES)
 
 palabra = PalabraAI()
-reader = FileReader("./input.mp3")
-writer = FileWriter("./output_spanish.wav")
-cfg = Config(SourceLang(EN, reader), [TargetLang(ES, writer)])
+reader = FileReader("./speech/es.mp3")
+writer = FileWriter("./es2en_out.wav")
+cfg = Config(SourceLang(ES, reader), [TargetLang(EN, writer)])
 palabra.run(cfg)
 ```
 
 ### Multiple target languages
 
 ```python
-from palabra_ai import PalabraAI, Config, SourceLang, TargetLang, FileReader, FileWriter, EN, ES, FR, DE
+from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
+                        FileReader, FileWriter, EN, ES, FR, DE)
 
+palabra = PalabraAI()
 config = Config(
     source=SourceLang(EN, FileReader("presentation.mp3")),
     targets=[
@@ -84,23 +79,81 @@ config = Config(
         TargetLang(DE, FileWriter("german.wav"))
     ]
 )
-
-palabra = PalabraAI()
 palabra.run(config)
 ```
+
+### Working with transcriptions
+
+You can optionally get transcriptions of the source and translated speech. Output can be configured to provide audio only, transcriptions only, or both:
+
+```python
+from palabra_ai import (
+    PalabraAI,
+    Config,
+    SourceLang,
+    TargetLang,
+    FileReader,
+    EN,
+    ES,
+)
+from palabra_ai.base.message import TranscriptionMessage
+
+
+async def print_translation_async(msg: TranscriptionMessage):
+    print(repr(msg))
+
+def print_translation(msg: TranscriptionMessage):
+    print(str(msg))
+
+palabra = PalabraAI()
+cfg = Config(
+    source=SourceLang(
+        EN,
+        FileReader("speech/en.mp3"),
+        print_translation  # Callback for source transcriptions
+    ),
+    targets=[
+        TargetLang(
+            ES,
+            # You can use only transcription without audio writer if you want
+            # FileWriter("./test_output.wav"),  # Optional: audio output
+            on_transcription=print_translation_async  # Callback for translated transcriptions
+        )
+    ],
+    silent=True,  # Set to True to disable verbose logging to console
+)
+palabra.run(cfg)
+```
+
+#### Transcription output options:
+
+1. **Audio only** (default):
+```python
+TargetLang(ES, FileWriter("output.wav"))
+```
+
+2. **Transcription only**:
+```python
+TargetLang(ES, on_transcription=your_callback_function)
+```
+
+3. **Both audio and transcription**:
+```python
+TargetLang(ES, FileWriter("output.wav"), on_transcription=your_callback_function)
+```
+
+The transcription callbacks receive `TranscriptionMessage` objects containing the transcribed text and metadata. Callbacks can be either synchronous or asynchronous functions.
 
 ### Integration with FFmpeg (streaming)
 
 ```python
-import subprocess
 import io
 from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
-                        BufferReader, BufferWriter, PipeWrapper, AR, EN)
+                        BufferReader, BufferWriter, AR, EN, RunAsPipe)
 
-# Launch FFmpeg to convert input to PCM16 mono 48kHz
 ffmpeg_cmd = [
     'ffmpeg',
-    '-i', 'input.mp3',
+    '-i', 'speech/ar.mp3',
     '-f', 's16le',      # 16-bit PCM
     '-acodec', 'pcm_s16le',
     '-ar', '48000',     # 48kHz
@@ -108,27 +161,39 @@ ffmpeg_cmd = [
     '-'                 # output to stdout
 ]
 
-# Start FFmpeg process
-ffmpeg_process = subprocess.Popen(
-    ffmpeg_cmd,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.DEVNULL
-)
+pipe_buffer = RunAsPipe(ffmpeg_cmd)
+es_buffer = io.BytesIO()
 
-# Wrap pipe to make it seekable
-pipe_buffer = PipeWrapper(ffmpeg_process.stdout)
-output_buffer = io.BytesIO()
-
-# Run Palabra AI translation
 palabra = PalabraAI()
 reader = BufferReader(pipe_buffer)
-writer = BufferWriter(output_buffer)
+writer = BufferWriter(es_buffer)
 cfg = Config(SourceLang(AR, reader), [TargetLang(EN, writer)])
 palabra.run(cfg)
 
-# Save translated audio
-with open("translated.wav", "wb") as f:
-    f.write(output_buffer.getbuffer())
+print(f"Translated audio written to buffer with size: {es_buffer.getbuffer().nbytes} bytes")
+with open("./ar2en_out.wav", "wb") as f:
+    f.write(es_buffer.getbuffer())
+```
+
+### Using buffers
+
+```python
+import io
+from palabra_ai import (PalabraAI, Config, SourceLang, TargetLang,
+                        BufferReader, BufferWriter, AR, EN)
+from palabra_ai.internal.audio import convert_any_to_pcm16
+
+en_buffer, es_buffer = io.BytesIO(), io.BytesIO()
+with open("speech/ar.mp3", "rb") as f:
+    en_buffer.write(convert_any_to_pcm16(f.read()))
+palabra = PalabraAI()
+reader = BufferReader(en_buffer)
+writer = BufferWriter(es_buffer)
+cfg = Config(SourceLang(AR, reader), [TargetLang(EN, writer)])
+palabra.run(cfg)
+print(f"Translated audio written to buffer with size: {es_buffer.getbuffer().nbytes} bytes")
+with open("./ar2en_out.wav", "wb") as f:
+    f.write(es_buffer.getbuffer())
 ```
 
 ### Using default audio devices
@@ -136,15 +201,15 @@ with open("translated.wav", "wb") as f:
 ```python
 from palabra_ai import PalabraAI, Config, SourceLang, TargetLang, DeviceManager, EN, ES
 
-devman = DeviceManager()
-reader, writer = devman.get_default_readers_writers()
+dm = DeviceManager()
+reader, writer = dm.get_default_readers_writers()
 
 if reader and writer:
+    palabra = PalabraAI()
     config = Config(
         source=SourceLang(EN, reader),
         targets=[TargetLang(ES, writer)]
     )
-    palabra = PalabraAI()
     palabra.run(config)
 ```
 
@@ -174,7 +239,7 @@ The SDK provides flexible I/O adapters that can be mixed in any combination:
 - **FileReader/FileWriter**: Read from and write to audio files
 - **DeviceReader/DeviceWriter**: Use microphones and speakers
 - **BufferReader/BufferWriter**: Work with in-memory buffers
-- **PipeWrapper**: Work with pipes (e.g., FFmpeg stdout)
+- **RunAsPipe**: Run command and represent as pipe (e.g., FFmpeg stdout)
 
 ### Mixing Examples
 
@@ -213,15 +278,16 @@ config = Config(
 )
 
 # FFmpeg pipe to speaker - stream processing
-pipe = PipeWrapper(ffmpeg_process.stdout)
+pipe = RunAsPipe(ffmpeg_process.stdout)
 config = Config(
     source=SourceLang(EN, BufferReader(pipe)),
     targets=[TargetLang(ES, speaker)]
 )
 
 # File to multiple speakers (if you have multiple audio devices)
-speaker1 = devman.get_speaker_by_name("Speaker 1")
-speaker2 = devman.get_speaker_by_name("Speaker 2")
+dm = DeviceManager()
+speaker1 = dm.get_speaker_by_name("Speaker 1")
+speaker2 = dm.get_speaker_by_name("Speaker 2")
 
 config = Config(
     source=SourceLang(EN, FileReader("input.mp3")),
@@ -244,16 +310,18 @@ Preserve the original speaker's voice characteristics in translations by enablin
 Easy device selection with interactive prompts or programmatic access:
 
 ```python
+dm = DeviceManager()
+
 # Interactive selection
-mic, speaker = devman.select_devices_interactive()
+mic, speaker = dm.select_devices_interactive()
 
 # Get devices by name
-mic = devman.get_mic_by_name("Blue Yeti")
-speaker = devman.get_speaker_by_name("MacBook Pro Speakers")
+mic = dm.get_mic_by_name("Blue Yeti")
+speaker = dm.get_speaker_by_name("MacBook Pro Speakers")
 
 # List all devices
-input_devices = devman.get_input_devices()
-output_devices = devman.get_output_devices()
+input_devices = dm.get_input_devices()
+output_devices = dm.get_output_devices()
 ```
 
 ## Supported Languages

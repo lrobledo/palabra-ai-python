@@ -8,10 +8,9 @@ from functools import partial
 from palabra_ai.base.message import Message
 from palabra_ai.base.task import Task
 from palabra_ai.config import (
-    EMPTY_MESSAGE_THRESHOLD,
-    MONITOR_TIMEOUT,
     Config,
 )
+from palabra_ai.constant import EMPTY_MESSAGE_THRESHOLD, MONITOR_TIMEOUT
 from palabra_ai.task.realtime import Realtime
 from palabra_ai.util.capped_set import CappedSet
 from palabra_ai.util.logger import debug, info

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Optional
 
 from environs import Env
 from pydantic import (
@@ -16,94 +16,46 @@ from pydantic import (
 )
 
 from palabra_ai.base.message import Message
+from palabra_ai.constant import (
+    CONTEXT_SIZE_DEFAULT,
+    DESIRED_QUEUE_LEVEL_MS_DEFAULT,
+    ENERGY_VARIANCE_FACTOR_DEFAULT,
+    F0_VARIANCE_FACTOR_DEFAULT,
+    FORCE_END_OF_SEGMENT_DEFAULT,
+    MAX_ALIGNMENT_CER_DEFAULT,
+    MAX_QUEUE_LEVEL_MS_DEFAULT,
+    MAX_STEPS_WITHOUT_EOS_DEFAULT,
+    MIN_ALIGNMENT_SCORE_DEFAULT,
+    MIN_SENTENCE_CHARACTERS_DEFAULT,
+    MIN_SENTENCE_SECONDS_DEFAULT,
+    MIN_SPLIT_INTERVAL_DEFAULT,
+    MIN_TRANSCRIPTION_LEN_DEFAULT,
+    MIN_TRANSCRIPTION_TIME_DEFAULT,
+    PHRASE_CHANCE_DEFAULT,
+    SEGMENT_CONFIRMATION_SILENCE_THRESHOLD_DEFAULT,
+    SEGMENTS_AFTER_RESTART_DEFAULT,
+    SPEECH_TEMPO_ADJUSTMENT_FACTOR_DEFAULT,
+    STEP_SIZE_DEFAULT,
+    VAD_LEFT_PADDING_DEFAULT,
+    VAD_RIGHT_PADDING_DEFAULT,
+    VAD_THRESHOLD_DEFAULT,
+)
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.lang import Language
-from palabra_ai.types import T_ON_TRANSCRIPTION, T_READER, T_WRITER
+from palabra_ai.types import T_ON_TRANSCRIPTION
 from palabra_ai.util.logger import set_logging
+
+if TYPE_CHECKING:
+    from palabra_ai.base.adapter import Reader, Writer
 
 env = Env(prefix="PALABRA_")
 env.read_env()
+SILENT = env.bool("SILENT", default=False)
 DEBUG = env.bool("DEBUG", default=False)
 DEEP_DEBUG = env.bool("DEEP_DEBUG", default=False)
+DEEPEST_DEBUG = env.bool("DEEPEST_DEBUG", default=False)
+TIMEOUT = env.int("TIMEOUT", default=0)
 LOG_FILE = env.path("LOG_FILE", default=None)
-
-SINGLE_TARGET_SUPPORTED_COUNT = 1
-# Audio Processing Constants
-CHUNK_SIZE = 16384
-SAMPLE_RATE_DEFAULT = 48000
-SAMPLE_RATE_HALF = 24000
-CHANNELS_MONO = 1
-OUTPUT_DEVICE_BLOCK_SIZE = 1024
-AUDIO_CHUNK_SECONDS = 0.5
-
-# Timing Constants
-BOOT_TIMEOUT = 30.0
-SHUTDOWN_TIMEOUT = 5.0
-LOGGER_SHUTDOWN_TIMEOUT = 20.0
-SAFE_PUBLICATION_END_DELAY = 10.0
-MONITOR_TIMEOUT = 0.1
-DEFAULT_PROCESS_TIMEOUT = 300.0
-TRACK_WAIT_TIMEOUT = 30.0
-TRACK_CLOSE_TIMEOUT = 5.0
-FINALIZE_WAIT_TIME = 5.0
-SLEEP_INTERVAL_DEFAULT = 0.1
-SLEEP_INTERVAL_LONG = 1.0
-SLEEP_INTERVAL_BUFFER_CHECK = 5.0
-QUEUE_READ_TIMEOUT = 1.0
-QUEUE_WAIT_TIMEOUT = 0.5
-WS_TIMEOUT = 5.0
-
-# Retry and Counter Constants
-TRACK_RETRY_MAX_ATTEMPTS = 30
-TRACK_RETRY_DELAY = 1.0
-GET_TASK_WAIT_TIMEOUT = 5.0
-
-
-# Buffer and Queue Constants
-THREADPOOL_MAX_WORKERS = 32
-DEVICE_ID_HASH_LENGTH = 8
-MONITOR_MESSAGE_PREVIEW_LENGTH = 100
-AUDIO_PROGRESS_LOG_INTERVAL = 100000
-
-# EOF and Completion Constants
-EMPTY_MESSAGE_THRESHOLD = 10
-EOF_DRAIN_TIMEOUT = 5.0
-COMPLETION_WAIT_TIMEOUT = 2.0
-STATS_LOG_INTERVAL = 5.0
-
-# Preprocessing Constants
-MIN_SENTENCE_CHARACTERS_DEFAULT = 80
-MIN_SENTENCE_SECONDS_DEFAULT = 4
-MIN_SPLIT_INTERVAL_DEFAULT = 0.6
-CONTEXT_SIZE_DEFAULT = 30
-SEGMENTS_AFTER_RESTART_DEFAULT = 15
-STEP_SIZE_DEFAULT = 5
-MAX_STEPS_WITHOUT_EOS_DEFAULT = 3
-FORCE_END_OF_SEGMENT_DEFAULT = 0.5
-
-# Filler Phrases Constants
-MIN_TRANSCRIPTION_LEN_DEFAULT = 40
-MIN_TRANSCRIPTION_TIME_DEFAULT = 3
-PHRASE_CHANCE_DEFAULT = 0.5
-
-# TTS Constants
-F0_VARIANCE_FACTOR_DEFAULT = 1.2
-ENERGY_VARIANCE_FACTOR_DEFAULT = 1.5
-SPEECH_TEMPO_ADJUSTMENT_FACTOR_DEFAULT = 0.75
-
-# Queue Config Constants
-DESIRED_QUEUE_LEVEL_MS_DEFAULT = 8000
-MAX_QUEUE_LEVEL_MS_DEFAULT = 24000
-
-# TranscriptionMessage Constants
-MIN_ALIGNMENT_SCORE_DEFAULT = 0.2
-MAX_ALIGNMENT_CER_DEFAULT = 0.8
-SEGMENT_CONFIRMATION_SILENCE_THRESHOLD_DEFAULT = 0.7
-
-# VAD Constants
-VAD_THRESHOLD_DEFAULT = 0.5
-VAD_LEFT_PADDING_DEFAULT = 1
-VAD_RIGHT_PADDING_DEFAULT = 1
 
 
 def validate_language(v):
@@ -248,7 +200,8 @@ class QueueConfigs(BaseModel):
 
 class SourceLang(BaseModel):
     lang: LanguageField
-    _reader: T_READER = PrivateAttr()
+
+    _reader: Reader = PrivateAttr()
     _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(default=None)
 
     transcription: Transcription = Field(default_factory=Transcription)
@@ -256,17 +209,26 @@ class SourceLang(BaseModel):
     def __init__(
         self,
         lang: LanguageField,
-        reader: T_READER,
-        /,
+        reader: Reader,
         on_transcription: T_ON_TRANSCRIPTION | None = None,
         **kwargs,
     ):
+        from palabra_ai.base.adapter import Reader
+
         super().__init__(lang=lang, **kwargs)
-        self._reader = reader
+        if not isinstance(reader, Reader):
+            raise ConfigurationError(
+                f"reader should be an instance of Reader, got {type(reader)}"
+            )
+        if on_transcription and not callable(on_transcription):
+            raise ConfigurationError(
+                f"on_transcription should be a callable function, got {type(on_transcription)}"
+            )
         self._on_transcription = on_transcription
+        self._reader = reader
 
     @property
-    def reader(self) -> T_READER:
+    def reader(self) -> Reader:
         return self._reader
 
     @property
@@ -276,21 +238,30 @@ class SourceLang(BaseModel):
 
 class TargetLang(BaseModel):
     lang: LanguageField
-    translation: Translation = Field(default_factory=Translation)
 
-    # TODO: get sync and async callback and run in loop/thread automatically
-    _writer: T_WRITER | None = PrivateAttr(default=None)
+    _writer: Writer | None = PrivateAttr(default=None)
     _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(default=None)
+
+    translation: Translation = Field(default_factory=Translation)
 
     def __init__(
         self,
         lang: LanguageField,
-        /,
-        writer: T_WRITER | None = None,
-        on_transcription: T_ON_TRANSCRIPTION | None = None,
+        writer: Optional[Writer] = None,
+        on_transcription: Optional[T_ON_TRANSCRIPTION] = None,
         **kwargs,
     ):
+        from palabra_ai.base.adapter import Writer
+
         super().__init__(lang=lang, **kwargs)
+        if writer and not isinstance(writer, Writer):
+            raise ConfigurationError(
+                f"reader should be an instance of Reader, got {type(writer)}"
+            )
+        if on_transcription and not callable(on_transcription):
+            raise ConfigurationError(
+                f"on_transcription should be a callable function, got {type(on_transcription)}"
+            )
         if not any([writer, on_transcription]):
             raise ConfigurationError(
                 f"You should use at least [writer] or [on_transcription] for TargetLang: {self.lang}, "
@@ -299,7 +270,7 @@ class TargetLang(BaseModel):
         self._on_transcription = on_transcription
 
     @property
-    def writer(self) -> T_WRITER | None:
+    def writer(self) -> Optional[Writer]:
         return self._writer
 
     @property
@@ -319,9 +290,11 @@ class Config(BaseModel):
     translation_queue_configs: QueueConfigs = Field(default_factory=QueueConfigs)
     allowed_message_types: list[str] = [mt.value for mt in Message.ALLOWED_TYPES]
 
+    silent: bool = Field(default=SILENT, exclude=True)
     log_file: Path | str | None = Field(default=LOG_FILE, exclude=True)
     debug: bool = Field(default=DEBUG, exclude=True)
     deep_debug: bool = Field(default=DEEP_DEBUG, exclude=True)
+    timeout: int = Field(default=TIMEOUT, exclude=True) # TODO!
 
     trace_file: Path | str | None = Field(default=None, exclude=True)
 
@@ -339,7 +312,7 @@ class Config(BaseModel):
             self.log_file = Path(self.log_file).absolute()
             self.log_file.parent.mkdir(exist_ok=True, parents=True)
             self.trace_file = self.log_file.with_suffix(".trace.json")
-        set_logging(self.debug, self.log_file)
+        set_logging(self.silent, self.debug, self.log_file)
         super().model_post_init(context)
 
     @model_validator(mode="before")

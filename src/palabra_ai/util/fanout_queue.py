@@ -1,8 +1,5 @@
 import asyncio
-import logging
 from typing import Any, NamedTuple
-
-logger = logging.getLogger(__name__)
 
 
 class Subscription(NamedTuple):

@@ -7,7 +7,8 @@ from typing import Any
 
 from palabra_ai.base.enum import Channel, Direction
 from palabra_ai.base.task import Task
-from palabra_ai.config import SHUTDOWN_TIMEOUT, SLEEP_INTERVAL_LONG, Config
+from palabra_ai.config import Config
+from palabra_ai.constant import SHUTDOWN_TIMEOUT, SLEEP_INTERVAL_LONG
 from palabra_ai.internal.realtime import PalabraRTClient
 from palabra_ai.util.fanout_queue import FanoutQueue
 from palabra_ai.util.logger import debug

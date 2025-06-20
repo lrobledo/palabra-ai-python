@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from palabra_ai.constant import DEBUG_TASK_CHECK_INTERVAL
+
 
 @dataclass
 class TaskInfo:
@@ -358,7 +360,7 @@ async def monitor_tasks_periodically():
     """Monitor tasks every N seconds"""
     while True:
         try:
-            await asyncio.sleep(10)  # Check every 10 seconds
+            await asyncio.sleep(DEBUG_TASK_CHECK_INTERVAL)
 
             diagnosis = diagnose_hanging_tasks()
             print(f"\n⏰ Periodic check:{diagnosis}")

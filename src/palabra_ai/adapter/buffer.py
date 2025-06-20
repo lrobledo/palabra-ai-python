@@ -10,7 +10,7 @@ import threading
 from dataclasses import KW_ONLY, dataclass
 
 from palabra_ai.base.adapter import Reader, Writer
-from palabra_ai.config import SLEEP_INTERVAL_DEFAULT
+from palabra_ai.constant import SLEEP_INTERVAL_DEFAULT
 from palabra_ai.internal.buffer import AudioBufferWriter
 from palabra_ai.util.logger import debug, error, warning
 
@@ -110,12 +110,12 @@ class BufferWriter(Writer):
                     self.buffer.write(audio_bytes)
 
                 except asyncio.CancelledError:
-                    warning("BufferWriter transfer cancelled")
+                    debug("BufferWriter transfer cancelled")
                     raise
                 except Exception as e:
                     error(f"Transfer error: {e}")
         except asyncio.CancelledError:
-            warning("BufferWriter transfer loop cancelled")
+            debug("BufferWriter transfer loop cancelled")
             raise
 
 

@@ -9,7 +9,7 @@ from functools import partial
 from typing import NamedTuple
 
 from palabra_ai.base.adapter import Reader, Writer
-from palabra_ai.config import (
+from palabra_ai.constant import (
     AUDIO_CHUNK_SECONDS,
     CHANNELS_MONO,
     DEVICE_ID_HASH_LENGTH,
@@ -219,7 +219,7 @@ class DeviceReader(Reader):
         try:
             return await self.q.get()
         except asyncio.CancelledError:
-            warning("DeviceReader read cancelled")
+            debug("DeviceReader read cancelled")
             +self.eof  # noqa
             raise
 
@@ -292,7 +292,7 @@ class DeviceWriter(Writer):
                     partial(self._output_device.add_audio_data, audio_bytes),
                 )
             except asyncio.CancelledError:
-                warning("DeviceWriter play audio cancelled")
+                debug("DeviceWriter play audio cancelled")
                 break
             except Exception as e:
                 error(f"Play error: {e}")

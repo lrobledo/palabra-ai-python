@@ -96,7 +96,7 @@ class TestAudio:
         mock_av.open.side_effect = Exception("Mock error")
         mock_av.AVError = type('AVError', (Exception,), {})
 
-        with patch("palabra_ai.internal.audio.logging.error"):
+        with patch("palabra_ai.internal.audio.error"):
             with pytest.raises(Exception):
                 convert_any_to_pcm16(b"test", normalize=False)
 
@@ -207,6 +207,6 @@ class TestAudio:
         mock_av.AVError = Exception
 
         # Mock logging to prevent string formatting error
-        with patch("palabra_ai.internal.audio.logging.error"):
+        with patch("palabra_ai.internal.audio.error"):
             with pytest.raises(Exception):
                 convert_any_to_pcm16(b"test")

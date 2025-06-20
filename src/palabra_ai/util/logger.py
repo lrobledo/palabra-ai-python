@@ -1,15 +1,19 @@
 import sys
-from logging import DEBUG, INFO
+from logging import DEBUG, INFO, WARNING
 from pathlib import Path
 
 from loguru import logger
 
 
-def set_logging(debug: bool, log_file: Path):
+def set_logging(silent: bool, debug: bool, log_file: Path):
     logger.remove()
+
+    screen = WARNING if silent else INFO
+    screen = DEBUG if debug else screen
+
     logger.add(
         sys.stderr,
-        level=DEBUG if debug else INFO,
+        level=screen,
         colorize=True,  # Keep default colors
     )
     if log_file:
@@ -44,4 +48,5 @@ __all__ = [
     "exception",
     "log",
     "trace",
+    "set_logging",
 ]

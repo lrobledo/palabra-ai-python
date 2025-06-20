@@ -5,7 +5,7 @@ from functools import partial
 
 from livekit import rtc
 
-from ..util.logger import debug, error, warning
+from ..util.logger import debug, error
 from .webrtc import (
     _PALABRA_TRANSLATOR_PARTICIPANT_IDENTITY_PREFIX,
     _PALABRA_TRANSLATOR_TRACK_NAME_PREFIX,
@@ -43,7 +43,7 @@ class RemoteAudioTrack:
                     await q.put(frame.frame)
                     await asyncio.sleep(0)
                 except asyncio.CancelledError:
-                    warning(f"RemoteAudioTrack {self.lang} listen cancelled during put")
+                    debug(f"RemoteAudioTrack {self.lang} listen cancelled during put")
                     raise
         except asyncio.CancelledError:
             debug(f"Cancelled listening to {self.lang} track")
@@ -54,7 +54,7 @@ class RemoteAudioTrack:
             try:
                 await stream.aclose()
             except asyncio.CancelledError:
-                warning(f"RemoteAudioTrack {self.lang} stream close cancelled")
+                debug(f"RemoteAudioTrack {self.lang} stream close cancelled")
             except Exception as e:
                 error(f"Error closing {self.lang} stream: {e}")
             debug(f"Closed {self.lang} stream")
@@ -89,7 +89,7 @@ class PalabraRTClient:
             self.wsc.connect()
             await self.room.connect(url=self._stream_url, token=self._jwt_token)
         except asyncio.CancelledError:
-            warning("PalabraRTClient connect cancelled")
+            debug("PalabraRTClient connect cancelled")
             raise
 
     async def new_translated_publication(
@@ -104,7 +104,7 @@ class PalabraRTClient:
             )
             return await self.room.new_publication(track_settings)
         except asyncio.CancelledError:
-            warning("PalabraRTClient new_translated_publication cancelled")
+            debug("PalabraRTClient new_translated_publication cancelled")
             raise
 
     async def get_translation_settings(
@@ -116,7 +116,7 @@ class PalabraRTClient:
                 debug("PalabraRTClient get_translation_settings sending request")
                 await self.wsc.send({"message_type": "get_task", "data": {}})
             except asyncio.CancelledError:
-                warning("PalabraRTClient get_translation_settings send cancelled")
+                debug("PalabraRTClient get_translation_settings send cancelled")
                 raise
 
             if timeout and time.perf_counter() - start > timeout:
@@ -125,14 +125,14 @@ class PalabraRTClient:
             try:
                 message = await self.wsc.receive(1)
             except asyncio.CancelledError:
-                warning("PalabraRTClient get_translation_settings receive cancelled")
+                debug("PalabraRTClient get_translation_settings receive cancelled")
                 raise
 
             if message is None:
                 try:
                     await asyncio.sleep(0)
                 except asyncio.CancelledError:
-                    warning("PalabraRTClient get_translation_settings sleep cancelled")
+                    debug("PalabraRTClient get_translation_settings sleep cancelled")
                     raise
                 continue
 
@@ -149,7 +149,7 @@ class PalabraRTClient:
         try:
             translation_settings = await _get_trans_settings()
         except asyncio.CancelledError:
-            warning("PalabraRTClient get_translation_languages cancelled")
+            debug("PalabraRTClient get_translation_languages cancelled")
             raise
         return [
             translation["target_language"]
@@ -173,7 +173,7 @@ class PalabraRTClient:
                     self.tg, lang, participant, publication
                 )
         except asyncio.CancelledError:
-            warning("PalabraRTClient get_translation_tracks cancelled")
+            debug("PalabraRTClient get_translation_tracks cancelled")
             raise
         return response
 
@@ -184,7 +184,7 @@ class PalabraRTClient:
             if self.wsc:
                 await self.wsc.close()
         except asyncio.CancelledError:
-            warning("PalabraRTClient close cancelled, forcing close")
+            debug("PalabraRTClient close cancelled, forcing close")
             try:
                 if self.room:
                     await asyncio.wait_for(self.room.close(), timeout=1.0)

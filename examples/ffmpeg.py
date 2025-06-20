@@ -12,11 +12,9 @@ if __name__ == "__main__":
         '-'                 # output to stdout
     ]
 
-    # Wrap pipe to make it seekable
     pipe_buffer = RunAsPipe(ffmpeg_cmd)
     es_buffer = io.BytesIO()
 
-    # Run Palabra AI translation
     palabra = PalabraAI()
     reader = BufferReader(pipe_buffer)
     writer = BufferWriter(es_buffer)

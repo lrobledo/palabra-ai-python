@@ -7,11 +7,13 @@ from typing import Any
 from palabra_ai.base.adapter import Writer
 from palabra_ai.base.task import Task
 from palabra_ai.config import (
+    Config,
+)
+from palabra_ai.constant import (
     SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
     TRACK_RETRY_DELAY,
     TRACK_RETRY_MAX_ATTEMPTS,
-    Config,
 )
 from palabra_ai.lang import Language
 from palabra_ai.task.realtime import Realtime

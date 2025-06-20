@@ -5,9 +5,12 @@ from dataclasses import KW_ONLY, dataclass
 from palabra_ai.base.task import Task
 from palabra_ai.config import (
     DEEP_DEBUG,
+)
+from palabra_ai.constant import (
     SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
     SLEEP_INTERVAL_LONG,
+    SLEEP_INTERVAL_MEDIUM,
 )
 from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
 from palabra_ai.util.logger import debug, info
@@ -71,21 +74,24 @@ class Stat(Task):
         return f"{deep}\n{self.stat_palabra_tasks}\n{self.stat_asyncio_tasks}"
 
     @property
-    def info(self):
-        states = [t._state[-1] if t._state else "⭕" for t in self.manager.tasks]
-        return "".join(states)
+    def _banner(self):
+        return "".join(t._state[-1] if t._state else "⭕" for t in self.manager.tasks)
 
-    def show_info(self):
-        info(self.info)
+    def show_banner(self):
+        info(self._banner)
 
-    async def _run_info_banner(self):
+    async def banner(self):
+        last_banner = ""
         while True:
-            self.show_info()
+            new_banner = self._banner
+            if new_banner != last_banner:
+                info(new_banner)
+                last_banner = new_banner
             try:
-                await asyncio.sleep(SLEEP_INTERVAL_LONG)
+                await asyncio.sleep(SLEEP_INTERVAL_MEDIUM)
             except asyncio.CancelledError:
-                debug("Stat._run_info_banner() cancelled")
+                debug("Stat.banner() cancelled")
                 break
 
-    def run_info_banner(self):
-        return self.sub_tg.create_task(self._run_info_banner(), name="Stat:info_banner")
+    def run_banner(self):
+        return self.sub_tg.create_task(self.banner(), name="Stat:info_banner")

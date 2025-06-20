@@ -7,10 +7,12 @@ from dataclasses import KW_ONLY, dataclass, field
 import palabra_ai
 from palabra_ai.base.task import Task
 from palabra_ai.config import (
+    Config,
+)
+from palabra_ai.constant import (
     QUEUE_READ_TIMEOUT,
     SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
-    Config,
 )
 from palabra_ai.task.realtime import Realtime, RtMsg
 from palabra_ai.util.logger import debug

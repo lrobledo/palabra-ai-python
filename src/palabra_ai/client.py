@@ -15,7 +15,7 @@ from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
 from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
-from palabra_ai.util.logger import debug, error, info
+from palabra_ai.util.logger import debug, error, warning
 
 
 @dataclass
@@ -91,7 +91,7 @@ class PalabraAI:
     async def process(
         self, cfg: Config, stopper: TaskEvent | None = None
     ) -> AsyncIterator[Manager]:
-        info("🤖 Connecting to Palabra.ai API...")
+        warning("🤖 Connecting to Palabra.ai API...")
         if stopper is None:
             stopper = TaskEvent()
 
@@ -101,7 +101,6 @@ class PalabraAI:
             base_url=self.api_endpoint,
         ).create_session()
 
-        manager = None
         try:
             async with asyncio.TaskGroup() as tg:
                 manager = Manager(cfg, credentials, stopper=stopper)(tg)
@@ -115,5 +114,5 @@ class PalabraAI:
                     error(f"Translation failed: {e}")
             raise
         finally:
-            info("🎉🎉🎉 Translation completed 🎉🎉🎉")
+            warning("🎉🎉🎉 Translation completed 🎉🎉🎉")
             debug(diagnose_hanging_tasks())

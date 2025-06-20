@@ -4,7 +4,8 @@ from dataclasses import KW_ONLY, dataclass, field
 
 import loguru
 
-from palabra_ai.config import DEEP_DEBUG, SHUTDOWN_TIMEOUT
+from palabra_ai.config import DEEP_DEBUG
+from palabra_ai.constant import SHUTDOWN_TIMEOUT
 from palabra_ai.util.emoji import Emoji
 from palabra_ai.util.logger import debug, error, warning
 
@@ -121,12 +122,13 @@ class Task(abc.ABC):
 
     async def _exit(self):
         try:
+            debug(f"{self.name}._exit()/proto exit() called, waiting for exit...")
             return await asyncio.wait_for(self.exit(), timeout=SHUTDOWN_TIMEOUT)
         except TimeoutError:
-            error(f"{self.name}.exit() timed out after {SHUTDOWN_TIMEOUT}s")
+            error(f"{self.name}.exit()/proto timed out after {SHUTDOWN_TIMEOUT}s")
             # Cancel all subtasks
             await self.cancel_all_subtasks()
-            warning(f"{self.name}.exit() all subtasks cancelled")
+            warning(f"{self.name}.exit()/proto all subtasks cancelled")
 
     async def cancel_all_subtasks(self):
         """Cancel all tasks in sub_tg"""
