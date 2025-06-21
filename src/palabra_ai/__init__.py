@@ -1,13 +1,15 @@
-from palabra_ai.adapter import (
+from palabra_ai.adapter.buffer import (
     BufferReader,
     BufferWriter,
+    RunAsPipe,
+)  # noqa: F401
+from palabra_ai.adapter.device import (  # noqa: F401
     DeviceManager,
     DeviceReader,
     DeviceWriter,
-    FileReader,
-    FileWriter,
-    RunAsPipe,
-)  # noqa: F401
+)
+from palabra_ai.adapter.dummy import DummyReader, DummyWriter  # noqa: F401
+from palabra_ai.adapter.file import FileReader, FileWriter  # noqa: F401
 from palabra_ai.client import PalabraAI  # noqa: F401
 from palabra_ai.config import Config, SourceLang, TargetLang  # noqa: F401
 from palabra_ai.lang import (
@@ -74,6 +76,9 @@ __all__ = [
     "BufferReader",
     "BufferWriter",
     "RunAsPipe",
+    # Dummy Adapters
+    "DummyReader",
+    "DummyWriter",
     # Languages
     "AR",
     "AR_AE",

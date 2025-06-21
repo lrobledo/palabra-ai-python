@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Optional
 
@@ -44,6 +43,7 @@ from palabra_ai.exc import ConfigurationError
 from palabra_ai.lang import Language
 from palabra_ai.types import T_ON_TRANSCRIPTION
 from palabra_ai.util.logger import set_logging
+from palabra_ai.util.orjson import from_json, to_json
 
 if TYPE_CHECKING:
     from palabra_ai.base.adapter import Reader, Writer
@@ -181,6 +181,10 @@ class SpeechGen(BaseModel):
     advanced: TTSAdvanced = Field(default_factory=TTSAdvanced)
 
 
+class TranslationAdvanced(BaseModel):
+    pass  # Empty for now, can be extended later
+
+
 class Translation(BaseModel):
     allowed_source_languages: list[str] = []
     translation_model: str = "auto"
@@ -188,11 +192,13 @@ class Translation(BaseModel):
     style: str | None = None
     translate_partial_transcriptions: bool = False
     speech_generation: SpeechGen = Field(default_factory=SpeechGen)
+    advanced: TranslationAdvanced = Field(default_factory=TranslationAdvanced)
 
 
 class QueueConfig(BaseModel):
     desired_queue_level_ms: int = DESIRED_QUEUE_LEVEL_MS_DEFAULT
     max_queue_level_ms: int = MAX_QUEUE_LEVEL_MS_DEFAULT
+    auto_tempo: bool = False
 
 
 class QueueConfigs(BaseModel):
@@ -203,7 +209,7 @@ class QueueConfigs(BaseModel):
 class SourceLang(BaseModel):
     lang: LanguageField
 
-    _reader: Reader = PrivateAttr()
+    _reader: Reader | None = PrivateAttr(default=None)
     _on_transcription: T_ON_TRANSCRIPTION | None = PrivateAttr(default=None)
 
     transcription: Transcription = Field(default_factory=Transcription)
@@ -211,17 +217,11 @@ class SourceLang(BaseModel):
     def __init__(
         self,
         lang: LanguageField,
-        reader: Reader,
+        reader: Reader | None = None,
         on_transcription: T_ON_TRANSCRIPTION | None = None,
         **kwargs,
     ):
-        from palabra_ai.base.adapter import Reader
-
         super().__init__(lang=lang, **kwargs)
-        if not isinstance(reader, Reader):
-            raise ConfigurationError(
-                f"reader should be an instance of Reader, got {type(reader)}"
-            )
         if on_transcription and not callable(on_transcription):
             raise ConfigurationError(
                 f"on_transcription should be a callable function, got {type(on_transcription)}"
@@ -253,20 +253,10 @@ class TargetLang(BaseModel):
         on_transcription: Optional[T_ON_TRANSCRIPTION] = None,
         **kwargs,
     ):
-        from palabra_ai.base.adapter import Writer
-
         super().__init__(lang=lang, **kwargs)
-        if writer and not isinstance(writer, Writer):
-            raise ConfigurationError(
-                f"reader should be an instance of Reader, got {type(writer)}"
-            )
         if on_transcription and not callable(on_transcription):
             raise ConfigurationError(
                 f"on_transcription should be a callable function, got {type(on_transcription)}"
-            )
-        if not any([writer, on_transcription]):
-            raise ConfigurationError(
-                f"You should use at least [writer] or [on_transcription] for TargetLang: {self.lang}, "
             )
         self._writer = writer
         self._on_transcription = on_transcription
@@ -281,10 +271,11 @@ class TargetLang(BaseModel):
 
 
 class Config(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+    model_config = ConfigDict(populate_by_name=True)
 
-    source: SourceLang
-    targets: list[TargetLang]  # TODO: SIMULTANEOUS TRANSLATION!!!
+    source: SourceLang | None = Field(default=None)
+    # TODO: SIMULTANEOUS TRANSLATION!!!
+    targets: list[TargetLang] | None = Field(default=None)
 
     input_stream: InputStream = Field(default_factory=InputStream)
     output_stream: OutputStream = Field(default_factory=OutputStream)
@@ -296,19 +287,26 @@ class Config(BaseModel):
     log_file: Path | str | None = Field(default=LOG_FILE, exclude=True)
     debug: bool = Field(default=DEBUG, exclude=True)
     deep_debug: bool = Field(default=DEEP_DEBUG, exclude=True)
-    timeout: int = Field(default=TIMEOUT, exclude=True) # TODO!
+    timeout: int = Field(default=TIMEOUT, exclude=True)  # TODO!
 
     trace_file: Path | str | None = Field(default=None, exclude=True)
 
     def __init__(
-        self, source: SourceLang, targets: list[TargetLang] | TargetLang, **kwargs
+        self,
+        source: SourceLang | None = None,
+        targets: list[TargetLang] | TargetLang | None = None,
+        **kwargs,
     ):
-        if isinstance(targets, TargetLang):
-            targets = [targets]
-        super().__init__(source=source, targets=targets, **kwargs)
+        super().__init__(__from_init=True, **kwargs)
+        if not self.source:
+            self.source = source
+        if not self.targets:
+            self.targets = targets
 
     def model_post_init(self, context: Any, /) -> None:
-        if isinstance(self.targets, TargetLang):
+        if self.targets is None:
+            self.targets = []
+        elif isinstance(self.targets, TargetLang):
             self.targets = [self.targets]
         if self.log_file:
             self.log_file = Path(self.log_file).absolute()
@@ -319,31 +317,37 @@ class Config(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reconstruct_from_legacy(cls, data: Any) -> Any:
+    def reconstruct_from_serialized(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
+
+        __from_init = data.pop("__from_init", False)
 
         # Extract pipeline if exists
         if "pipeline" in data:
             pipeline = data.pop("pipeline")
             data.update(pipeline)
 
-        # Reconstruct src if not present
-        if "src" not in data and "transcription" in data:
-            trans_data = data.pop("transcription")
-            source_lang = trans_data.pop("source_language", None)
-            if source_lang:
-                data["src"] = {"lang": source_lang, "transcription": trans_data}
+        raw_source = data.pop("transcription", {})
+        source_lang = raw_source.pop("source_language", None)
+        if not __from_init and not source_lang:
+            raise ConfigurationError(
+                f"Source language must be specified in the transcription section. {raw_source}"
+            )
+        if source_lang:
+            data["source"] = {"lang": source_lang, "transcription": raw_source}
 
         # Reconstruct targets if not present
-        if "targets" not in data and "translations" in data:
-            translations = data.pop("translations")
-            targets = []
-            for trans in translations:
-                target_lang = trans.pop("target_language", None)
-                if target_lang:
-                    targets.append({"lang": target_lang, "translation": trans})
-            data["targets"] = targets
+        raw_targets = data.pop("translations", {})
+        targets = []
+        for raw_target in raw_targets:
+            target_lang = raw_target.pop("target_language", None)
+            if not __from_init and not target_lang:
+                raise ConfigurationError(
+                    f"Target language must be specified in the translation section. {raw_target}"
+                )
+            targets.append({"lang": target_lang, "translation": raw_target})
+        data["targets"] = targets
 
         return data
 
@@ -392,15 +396,15 @@ class Config(BaseModel):
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump()
 
-    def to_json(self, indent=2) -> str:
-        return self.model_dump_json(indent=indent)
-
-    @classmethod
-    def from_json(cls, data: str | dict) -> Config:
-        if isinstance(data, str):
-            data = json.loads(data)
-        return cls.model_validate(data)
+    def to_json(self) -> str:
+        return to_json(self.model_dump()).decode("utf-8")
 
     @classmethod
     def from_dict(cls, data: dict) -> Config:
         return cls.from_json(data)
+
+    @classmethod
+    def from_json(cls, data: str | dict) -> Config:
+        if isinstance(data, str):
+            data = from_json(data)
+        return cls.model_validate(data)

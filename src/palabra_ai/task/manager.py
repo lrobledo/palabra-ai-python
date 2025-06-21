@@ -57,19 +57,29 @@ class Manager(Task):
         self.stat = Stat(self)
 
         if len(self.cfg.targets) != SINGLE_TARGET_SUPPORTED_COUNT:
-            raise ConfigurationError("Only single target language supported")
+            raise ConfigurationError(
+                f"Only single target language supported, got {len(self.cfg.targets)}"
+            )
 
-        self.reader = self.cfg.source.reader
-        if not isinstance(self.reader, Reader):
-            raise ConfigurationError("src.reader must be Reader")
-
+        self.reader = reader = self.cfg.source.reader
         target = self.cfg.targets[0]
-        self.writer = target.writer
+        self.writer = writer = target.writer
+
+        if not isinstance(reader, Reader):
+            raise ConfigurationError(
+                f"cfg.source.reader should be an instance of Reader, got {type(reader)}"
+            )
+
+        if not any([isinstance(writer, Writer), callable(target.on_transcription)]):
+            raise ConfigurationError(
+                f"You should use at least [writer] or [on_transcription] for TargetLang: "
+                f"{self.cfg.targets[0]}, got neither or mistyped them, "
+                f"writer={type(writer)}, on_transcription={type(target.on_transcription)}"
+            )
+
         if not self.writer:
             debug(f"🔧 {self.name} using DummyWriter for target {target.lang}")
             self.writer = DummyWriter()
-        if self.writer and not isinstance(self.writer, Writer):
-            raise ConfigurationError("target.writer must be Writer")
 
         if hasattr(self.writer, "set_track_settings"):
             self.writer.set_track_settings(self.track_settings)
@@ -79,7 +89,6 @@ class Manager(Task):
         self.rt = Realtime(self.cfg, self.credentials)
         if self.cfg.log_file:
             self.logger = Logger(self.cfg, self.rt)
-            self.tasks.append(self.logger)
 
         self.transcription = Transcription(self.cfg, self.rt)
 
@@ -102,14 +111,20 @@ class Manager(Task):
 
         self.tasks.extend(
             [
-                self,
-                self.rtmon,
-                self.rt,
-                self.reader,
-                self.writer,
-                self.receiver,
-                self.sender,
-                self.transcription,
+                t
+                for t in [
+                    self.reader,
+                    self.sender,
+                    self.rt,
+                    self.receiver,
+                    self.writer,
+                    self.rtmon,
+                    self.transcription,
+                    self.logger,
+                    self,
+                    self.stat,
+                ]
+                if isinstance(t, Task)
             ]
         )
 
@@ -192,7 +207,10 @@ class Manager(Task):
             debug(f"🔧 {self.name}.exit() tasks: {[t.name for t in self.tasks]}")
             # DON'T use _abort() - it's internal!
             # Cancel all subtasks properly
-            await self.cancel_all_subtasks()
+            try:
+                await self.cancel_all_subtasks()
+            except asyncio.CancelledError:
+                debug(f"🔧 {self.name}.exit() cancelled while cancelling subtasks")
             self._show_banner_loop.cancel()
 
     async def shutdown_task(self, task, timeout=SHUTDOWN_TIMEOUT):

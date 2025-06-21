@@ -7,18 +7,15 @@ from palabra_ai.lang import Language
 from palabra_ai.adapter.dummy import DummyWriter
 
 
-class TestReceiverTranslatedAudio:
+class TestTaskReceiver:
     @pytest.mark.asyncio
     async def test_boot(self):
         cfg = MagicMock(spec=Config)
         writer = MagicMock()
         rt = MagicMock()
 
-        # Create proper awaitables
-        async def writer_ready():
-            pass
-        async def rt_ready():
-            pass
+        async def writer_ready(): pass
+        async def rt_ready(): pass
 
         writer.ready = writer_ready()
         rt.ready = rt_ready()
@@ -28,13 +25,9 @@ class TestReceiverTranslatedAudio:
         })
 
         receiver = ReceiverTranslatedAudio(cfg, writer, rt, Language("es"))
-
-        # Mock setup_translation to avoid complex setup
         receiver.setup_translation = AsyncMock()
 
         await receiver.boot()
-
-        # Just verify it completes without error
         receiver.setup_translation.assert_called_once()
 
     @pytest.mark.asyncio
@@ -66,7 +59,6 @@ class TestReceiverTranslatedAudio:
 
         receiver = ReceiverTranslatedAudio(cfg, writer, rt, Language("es"))
 
-        # Mock the constants to make test fast
         import palabra_ai.task.receiver
         original_max = palabra_ai.task.receiver.TRACK_RETRY_MAX_ATTEMPTS
         original_delay = palabra_ai.task.receiver.TRACK_RETRY_DELAY
@@ -80,6 +72,18 @@ class TestReceiverTranslatedAudio:
         finally:
             palabra_ai.task.receiver.TRACK_RETRY_MAX_ATTEMPTS = original_max
             palabra_ai.task.receiver.TRACK_RETRY_DELAY = original_delay
+
+    @pytest.mark.asyncio
+    async def test_setup_translation_with_stopper(self):
+        cfg = MagicMock(spec=Config)
+        writer = DummyWriter()
+        rt = MagicMock()
+
+        receiver = ReceiverTranslatedAudio(cfg, writer, rt, Language("es"))
+        receiver.stopper.set()
+
+        await receiver.setup_translation()
+        assert receiver._track is None
 
     @pytest.mark.asyncio
     async def test_exit_with_track(self):
@@ -97,8 +101,6 @@ class TestReceiverTranslatedAudio:
 
         track.stop_listening.assert_called_once()
         assert receiver.eof.is_set()
-
-        # Check that None was put in writer queue
         assert writer.q.get_nowait() is None
 
     @pytest.mark.asyncio
@@ -110,7 +112,6 @@ class TestReceiverTranslatedAudio:
         receiver = ReceiverTranslatedAudio(cfg, writer, rt, Language("es"))
 
         track = MagicMock()
-        # Make stop_listening hang
         async def hanging_stop():
             await asyncio.sleep(10)
         track.stop_listening = hanging_stop
@@ -121,3 +122,21 @@ class TestReceiverTranslatedAudio:
 
         assert receiver.eof.is_set()
         assert receiver._track is None
+
+    @pytest.mark.asyncio
+    async def test_do_method(self):
+        cfg = MagicMock(spec=Config)
+        writer = DummyWriter()
+        rt = MagicMock()
+
+        receiver = ReceiverTranslatedAudio(cfg, writer, rt, Language("es"))
+
+        async def stop_soon():
+            await asyncio.sleep(0.1)
+            receiver.stopper.set()
+
+        await asyncio.gather(
+            receiver.do(),
+            stop_soon(),
+            return_exceptions=True
+        )

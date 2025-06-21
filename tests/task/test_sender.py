@@ -1,19 +1,20 @@
 import asyncio
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
-from palabra_ai.task.sender import SenderSourceAudio
+from palabra_ai.task.sender import SenderSourceAudio, BYTES_PER_SAMPLE
 from palabra_ai.config import Config
 from palabra_ai.internal.webrtc import AudioTrackSettings
 
 
-class TestSenderSourceAudio:
+class TestTaskSender:
+    def test_bytes_per_sample_constant(self):
+        assert BYTES_PER_SAMPLE == 2
+
     @pytest.mark.asyncio
     async def test_boot(self):
         cfg = MagicMock(spec=Config)
         rt = MagicMock()
-        # Create a proper awaitable
-        async def ready_coro():
-            pass
+        async def ready_coro(): pass
         rt.ready = ready_coro()
         rt.c = MagicMock()
         rt.c.new_translated_publication = AsyncMock(return_value=MagicMock())
@@ -44,7 +45,6 @@ class TestSenderSourceAudio:
 
         await sender.do()
 
-        # Should have processed 2 chunks
         assert track.push.call_count == 2
         assert sender.bytes_sent == len(b"chunk1") + len(b"chunk2")
         assert sender.eof.is_set()
@@ -65,9 +65,26 @@ class TestSenderSourceAudio:
 
         await sender.do()
 
-        # Should skip empty chunk and process only "data"
+        # Should skip empty chunk
         assert track.push.call_count == 1
         assert sender.bytes_sent == len(b"data")
+
+    @pytest.mark.asyncio
+    async def test_do_with_stopper(self):
+        cfg = MagicMock(spec=Config)
+        rt = MagicMock()
+        reader = MagicMock()
+        reader.read = AsyncMock(side_effect=[b"data"])
+
+        sender = SenderSourceAudio(cfg, rt, reader, {}, AudioTrackSettings())
+        sender._track = MagicMock()
+        sender._track.push = AsyncMock()
+        sender.stopper.set()
+
+        await sender.do()
+
+        # Should exit without reading
+        reader.read.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_exit_with_track(self):
@@ -81,7 +98,6 @@ class TestSenderSourceAudio:
         track.close = AsyncMock()
         sender._track = track
 
-        # Mock sleep to avoid waiting
         with patch('asyncio.sleep', new_callable=AsyncMock):
             await sender.exit()
 
@@ -97,7 +113,6 @@ class TestSenderSourceAudio:
         sender = SenderSourceAudio(cfg, rt, reader, {}, AudioTrackSettings())
 
         track = MagicMock()
-        # Make close hang
         async def hanging_close():
             await asyncio.sleep(10)
         track.close = hanging_close

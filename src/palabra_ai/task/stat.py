@@ -7,12 +7,11 @@ from palabra_ai.config import (
     DEEP_DEBUG,
 )
 from palabra_ai.constant import (
-    SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
     SLEEP_INTERVAL_LONG,
     SLEEP_INTERVAL_MEDIUM,
 )
-from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
+from palabra_ai.debug.hang_coroutines import diagnose_hanging_tasks
 from palabra_ai.util.logger import debug, info
 
 
@@ -34,8 +33,14 @@ class Stat(Task):
                 debug(self.stat)
                 last_state = new_state
             i += 1
-            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
-        await asyncio.sleep(SLEEP_INTERVAL_LONG)
+            try:
+                await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
+            except asyncio.CancelledError:
+                debug("Stat.do() tried to cancel, but we don't approve of that!")
+        try:
+            await asyncio.sleep(SLEEP_INTERVAL_LONG)
+        except asyncio.CancelledError:
+            pass
         debug(self.stat)
 
     async def exit(self):
@@ -43,9 +48,9 @@ class Stat(Task):
 
         moment = time.time()
 
-        while time.time() - moment < SHUTDOWN_TIMEOUT:
+        while time.time() - moment < SLEEP_INTERVAL_LONG:
             try:
-                await asyncio.sleep(SLEEP_INTERVAL_LONG)
+                await asyncio.sleep(SLEEP_INTERVAL_MEDIUM)
             except asyncio.CancelledError:
                 pass
             debug(self.stat)

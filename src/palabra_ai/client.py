@@ -2,22 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import signal
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 
 from aioshutdown import SIGHUP, SIGINT, SIGTERM
 
-from palabra_ai.base.task import TaskEvent
-from palabra_ai.config import CLIENT_ID
-from palabra_ai.config import CLIENT_SECRET
-from palabra_ai.config import DEEP_DEBUG, Config
+from palabra_ai.base.task_event import TaskEvent
+from palabra_ai.config import CLIENT_ID, CLIENT_SECRET, DEEP_DEBUG, Config
+from palabra_ai.debug.hang_coroutines import diagnose_hanging_tasks
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
-from palabra_ai.util.dbg_hang_coro import diagnose_hanging_tasks
 from palabra_ai.util.logger import debug, error, warning
 
 
@@ -101,6 +97,7 @@ class PalabraAI:
             base_url=self.api_endpoint,
         ).create_session()
 
+        manager = None
         try:
             async with asyncio.TaskGroup() as tg:
                 manager = Manager(cfg, credentials, stopper=stopper)(tg)

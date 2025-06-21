@@ -3,6 +3,13 @@ from palabra_ai.util.capped_set import CappedSet
 
 
 class TestCappedSet:
+    def test_invalid_capacity(self):
+        with pytest.raises(ValueError, match="Capacity must be positive"):
+            CappedSet(0)
+
+        with pytest.raises(ValueError):
+            CappedSet(-1)
+
     def test_basic_operations(self):
         cs = CappedSet(3)
 
@@ -25,12 +32,11 @@ class TestCappedSet:
         cs = CappedSet(3)
         cs.add("a")
         cs.add("b")
-        cs.add("a")  # Re-add existing - doesn't affect order
+        cs.add("a")  # Re-add existing
 
         cs.add("c")
         cs.add("d")
 
-        # Based on actual implementation, 'a' is removed as oldest
         assert "a" not in cs
         assert "b" in cs
         assert "c" in cs
@@ -43,20 +49,18 @@ class TestCappedSet:
 
         repr_str = repr(cs)
         assert "CappedSet" in repr_str
-        # Just check it returns a string representation
         assert isinstance(repr_str, str)
 
-    def test_len(self):
+    def test_len_and_bool(self):
         cs = CappedSet(5)
         assert len(cs) == 0
+        assert not cs  # Empty is falsy
 
         cs.add("a")
         cs.add("b")
         assert len(cs) == 2
-
-    def test_bool(self):
-        cs = CappedSet(2)
-        assert not cs  # Empty is falsy
-
-        cs.add("x")
         assert cs  # Non-empty is truthy
+
+    def test_capacity_property(self):
+        cs = CappedSet(5)
+        assert cs.capacity == 5

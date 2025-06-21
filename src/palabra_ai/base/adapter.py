@@ -7,7 +7,8 @@ from typing import Optional
 
 from livekit.rtc import AudioFrame
 
-from palabra_ai.base.task import Task, TaskEvent
+from palabra_ai.base.task import Task
+from palabra_ai.base.task_event import TaskEvent
 from palabra_ai.constant import CHUNK_SIZE
 
 
