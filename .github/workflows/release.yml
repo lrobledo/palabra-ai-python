@@ -2,11 +2,9 @@ name: Create Release with Assets
 
 on:
   workflow_run:
-    workflows: ["Update Version from Tag"]
-    types:
-      - completed
-    branches:
-      - main
+    workflows: ["BUMP_VERSION_FROM_TAG"]
+    types: [completed]
+    branches: [main]
 
 jobs:
   release:
@@ -18,30 +16,27 @@ jobs:
       id-token: write  # MANDATORY for OIDC PyPI publishing
 
     steps:
-    - name: Get tag from triggering workflow
+    - uses: actions/checkout@v4
+      with:
+        ref: main  # Always checkout main, then get the latest tag
+
+    - name: Get latest tag
       id: get_tag
       run: |
-        # Get the tag that triggered the sync workflow
-        TAG_NAME=$(echo "${{ github.event.workflow_run.head_branch }}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+        # Get the most recent tag
+        git pull --tags --force
+        TAG_NAME=$(git describe --tags --abbrev=0)
 
         if [ -z "$TAG_NAME" ]; then
-          # Fallback: get the most recent tag from the ref
-          git clone --depth 1 --branch main ${{ github.event.repository.clone_url }} repo
-          cd repo
-          TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-        fi
-
-        if [ -z "$TAG_NAME" ]; then
-          echo "Could not determine tag name"
+          echo "Could not find any tags"
           exit 1
         fi
 
         echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "Found tag: $TAG_NAME"
 
-    - uses: actions/checkout@v4
-      with:
-        ref: ${{ steps.get_tag.outputs.tag_name }}  # Checkout the updated tag
+        # Checkout the tag
+        git checkout $TAG_NAME
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6

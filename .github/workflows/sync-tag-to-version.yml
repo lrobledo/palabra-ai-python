@@ -1,9 +1,9 @@
-name: Update Version from Tag
+name: BUMP_VERSION_FROM_TAG
 
 on:
   push:
-    tags:
-      - 'v*'
+    tags: ['v*']
+    branches: [main]
 
 jobs:
   update-version:
