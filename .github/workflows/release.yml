@@ -4,7 +4,6 @@ on:
   workflow_run:
     workflows: ["Bump Version from Tag"]
     types: [completed]
-    branches: [main]
 
 jobs:
   release:
