@@ -20,7 +20,6 @@
 ✨ **What can Palabra.ai do?**
 - ⚡ Real-time speech-to-speech translation with near-zero latency
 - 🎙️ Auto voice cloning - speak any language in YOUR voice
-- 🌍 30+ languages with emotion transfer
 - 🔄 Two-way simultaneous translation for live discussions
 - 🚀 Developer API/SDK for building your own apps
 - 🎯 Works everywhere - Zoom, streams, events, any platform
