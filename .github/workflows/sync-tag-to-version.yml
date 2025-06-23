@@ -107,6 +107,7 @@ jobs:
         python << 'EOF'
         import re
         import os
+        import time
 
         version = os.environ.get('VERSION', '${{ steps.extract_version.outputs.version }}')
 
@@ -137,35 +138,29 @@ jobs:
             content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
             with open('uv.lock', 'w') as f:
                 f.write(content)
+
+        # Always add a timestamp to ensure file changes
+        with open('.github/.release_timestamp', 'w') as f:
+            f.write(f"Release {version} at {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
         EOF
 
         # Configure git
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
 
-        # Check if there are changes
-        if git diff --quiet; then
-          echo "No changes needed - version already matches tag"
-          echo "skip_update=true" >> $GITHUB_ENV
-        else
-          # List changed files
-          echo "Changed files:"
-          git diff --name-only
+        # Always commit changes (including timestamp file)
+        git add pyproject.toml src/palabra_ai/__init__.py .github/.release_timestamp
 
-          # Commit changes
-          git add pyproject.toml src/palabra_ai/__init__.py
-
-          # Add uv.lock if it was modified
-          if [ -f "uv.lock" ] && git diff --name-only | grep -q "uv.lock"; then
-            git add uv.lock
-          fi
-
-          git commit -m "🔖 Update version to $VERSION for release ${{ steps.extract_version.outputs.tag_name }}"
-          echo "skip_update=false" >> $GITHUB_ENV
+        # Add uv.lock if it exists
+        if [ -f "uv.lock" ]; then
+          git add uv.lock
         fi
 
+        git commit -m "🔖 Update version to $VERSION for release ${{ steps.extract_version.outputs.tag_name }}"
+
+        echo "✅ Version update commit created"
+
     - name: Push commit to main and update tag
-      if: env.skip_update == 'false'
       run: |
         TAG_NAME="${{ steps.extract_version.outputs.tag_name }}"
 
@@ -184,22 +179,18 @@ jobs:
 
     - name: Summary
       run: |
-        if [ "${{ env.skip_update }}" == "true" ]; then
-          echo "## No Update Needed 🟢" >> $GITHUB_STEP_SUMMARY
-          echo "Version in pyproject.toml, __init__.py and uv.lock already matches tag ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "## Version Updated! 🎉" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tests**: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tag**: ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Updated files**:" >> $GITHUB_STEP_SUMMARY
-          echo "  - pyproject.toml" >> $GITHUB_STEP_SUMMARY
-          echo "  - src/palabra_ai/__init__.py" >> $GITHUB_STEP_SUMMARY
-          if [ -f "uv.lock" ]; then
-            echo "  - uv.lock" >> $GITHUB_STEP_SUMMARY
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Commit pushed to main and tag moved to new commit." >> $GITHUB_STEP_SUMMARY
-          echo "✅ Release workflow will be triggered automatically." >> $GITHUB_STEP_SUMMARY
+        echo "## Version Updated! 🎉" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tests**: ✅ All tests passed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag**: ${{ steps.extract_version.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.extract_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Updated files**:" >> $GITHUB_STEP_SUMMARY
+        echo "  - pyproject.toml" >> $GITHUB_STEP_SUMMARY
+        echo "  - src/palabra_ai/__init__.py" >> $GITHUB_STEP_SUMMARY
+        echo "  - .github/.release_timestamp (ensures unique commit)" >> $GITHUB_STEP_SUMMARY
+        if [ -f "uv.lock" ]; then
+          echo "  - uv.lock" >> $GITHUB_STEP_SUMMARY
         fi
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Commit pushed to main and tag moved to new commit." >> $GITHUB_STEP_SUMMARY
+        echo "✅ Release workflow will be triggered automatically." >> $GITHUB_STEP_SUMMARY
