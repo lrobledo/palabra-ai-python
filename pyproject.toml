@@ -65,6 +65,18 @@ pythonpath = ["src"]
 testpaths = ["tests", "src"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+norecursedirs = [
+    "experimental",
+    "debug",
+    "examples",
+    "scripts",
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+    "venv"
+]
 addopts = [
     "--cov=palabra_ai",
     "--cov-report=term-missing",
@@ -73,6 +85,10 @@ addopts = [
     "--cov-fail-under=50",
     "--doctest-modules",
     "--verbose",
+    "--ignore=src/palabra_ai/experimental",
+    "--ignore=src/palabra_ai/debug",
+    "--ignore=src/palabra_ai/examples",
+    "--ignore=src/palabra_ai/scripts"
 ]
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
 
