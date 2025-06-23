@@ -1,9 +1,8 @@
-name: BUMP_VERSION_FROM_TAG
+name: Update Version from Tag
 
 on:
   push:
     tags: ['v*']
-    branches: [main]
 
 jobs:
   update-version:
@@ -17,6 +16,32 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         ref: ${{ github.ref }}  # Use tag state
         fetch-depth: 0
+
+    - name: Verify this is a tag event
+      run: |
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
+
+        # Check if this is actually a tag push event
+        if [[ "$GITHUB_EVENT_NAME" != "push" ]]; then
+          echo "❌ This workflow should only run on push events"
+          exit 1
+        fi
+
+        # Check if ref is a tag
+        if [[ ! "$GITHUB_REF" =~ ^refs/tags/ ]]; then
+          echo "❌ This workflow should only run for tags, got: $GITHUB_REF"
+          exit 1
+        fi
+
+        # Extract tag name and check format
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Tag must be in format vX.Y.Z, got: $TAG_NAME"
+          exit 1
+        fi
+
+        echo "✅ Valid tag event: $TAG_NAME"
 
     - name: Check if tag is on main branch
       run: |
