@@ -80,6 +80,7 @@ norecursedirs = [
 addopts = [
     "--cov=palabra_ai",
     "--cov-report=term-missing",
+    "--cov-report=xml",
     "--cov-report=html",
     "--cov-branch",
     "--cov-fail-under=50",
