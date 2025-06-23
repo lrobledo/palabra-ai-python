@@ -58,7 +58,7 @@ from palabra_ai.lang import (
     ZH,
 )  # noqa: F401
 
-__version__ = "refs/heads/main"
+__version__ = "0.2.0"
 
 __all__ = [
     # Client

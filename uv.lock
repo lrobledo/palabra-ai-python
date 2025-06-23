@@ -991,7 +991,7 @@ wheels = [
 
 [[package]]
 name = "palabra-ai"
-version = "refs/heads/main"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiofile" },
