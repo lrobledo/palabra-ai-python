@@ -71,7 +71,8 @@ addopts = [
     "--cov-report=html",
     "--cov-branch",
     "--cov-fail-under=50",
-    "--doctest-modules"
+    "--doctest-modules",
+    "--verbose",
 ]
 doctest_optionflags = ["NORMALIZE_WHITESPACE", "IGNORE_EXCEPTION_DETAIL"]
 

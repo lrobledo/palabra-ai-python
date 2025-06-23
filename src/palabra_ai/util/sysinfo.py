@@ -121,10 +121,7 @@ class SystemInfo:
     def _collect_locale_info(self) -> None:
         """Collect locale information."""
         try:
-            self.locale_info = {
-                "default": locale.getdefaultlocale()[0],
-                "preferred_encoding": locale.getpreferredencoding(False),
-            }
+            self.locale_info = locale.getlocale()
         except Exception:
             pass
 

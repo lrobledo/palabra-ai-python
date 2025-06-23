@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, ClassVar, Union
 
-from pydantic import BaseModel, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 from palabra_ai.lang import Language
 from palabra_ai.util.logger import debug
@@ -316,8 +316,7 @@ class TranscriptionMessage(Message):
     language: Language
     segments: list[TranscriptionSegment]
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def dedup(self) -> str:

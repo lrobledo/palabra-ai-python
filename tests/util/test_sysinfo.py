@@ -22,7 +22,7 @@ class TestSysinfo:
             assert info.resource_limits == {}
         
         # Test locale exception
-        with patch('locale.getdefaultlocale', side_effect=Exception("Test error")):
+        with patch('locale.getlocale', side_effect=Exception("Test error")):
             info = SystemInfo()
             assert info.locale_info == {}
         
