@@ -1,28 +1,65 @@
 name: Create Release with Assets
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["Update Version from Tag"]
+    types:
+      - completed
+    branches:
+      - main
 
 jobs:
   release:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: write
       packages: write
       id-token: write  # MANDATORY for OIDC PyPI publishing
 
     steps:
+    - name: Get tag from triggering workflow
+      id: get_tag
+      run: |
+        # Get the tag that triggered the sync workflow
+        TAG_NAME=$(echo "${{ github.event.workflow_run.head_branch }}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+
+        if [ -z "$TAG_NAME" ]; then
+          # Fallback: get the most recent tag from the ref
+          git clone --depth 1 --branch main ${{ github.event.repository.clone_url }} repo
+          cd repo
+          TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        fi
+
+        if [ -z "$TAG_NAME" ]; then
+          echo "Could not determine tag name"
+          exit 1
+        fi
+
+        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "Found tag: $TAG_NAME"
+
     - uses: actions/checkout@v4
       with:
-        ref: ${{ github.ref }}  # Use the tag ref to get the updated commit
+        ref: ${{ steps.get_tag.outputs.tag_name }}  # Checkout the updated tag
 
     - name: Install uv
       uses: astral-sh/setup-uv@v4
 
     - name: Set up Python
       run: uv python install 3.11
+
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y portaudio19-dev
+
+    - name: Install dependencies and run tests
+      run: |
+        uv sync --all-extras --dev
+        echo "Running tests to ensure code quality before release..."
+        uv run pytest --tb=short -q
+        echo "✅ All tests passed!"
 
     - name: Build package
       run: |
@@ -39,9 +76,10 @@ jobs:
     - name: Get version from tag
       id: get_version
       run: |
-        VERSION="${GITHUB_REF#refs/tags/v}"
+        TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
+        VERSION="${TAG_NAME#v}"
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-        echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
     # Publish to PyPI FIRST (before GitHub Release and Docker)
     - name: Publish to PyPI
@@ -82,16 +120,16 @@ jobs:
         OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
         REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
         IMAGE_BASE_NAME=$(echo "$REPO_NAME" | sed 's/^draft-//')
-        
+
         # Try to link the package to this repository
         echo "Attempting to link ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME} to ${{ github.repository }}..."
-        
+
         # Get repository ID
         REPO_ID=$(curl -s \
           -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
           -H "Accept: application/vnd.github.v3+json" \
           "https://api.github.com/repos/${{ github.repository }}" | jq -r '.id')
-        
+
         if [ "$REPO_ID" != "null" ] && [ -n "$REPO_ID" ]; then
           # Try to link the package to this repository
           curl -X PUT \
@@ -112,10 +150,10 @@ jobs:
         LABEL org.opencontainers.image.documentation=https://github.com/${{ github.repository }}/blob/main/README.md
         LABEL org.opencontainers.image.vendor="${{ github.repository_owner }}"
         LABEL org.opencontainers.image.version="${{ steps.get_version.outputs.VERSION }}"
-        
+
         COPY dist/*.whl /tmp/
         RUN pip install /tmp/*.whl && rm /tmp/*.whl
-        
+
         # This is a library image, not meant to be run directly
         CMD ["python", "-c", "import palabra_ai; print(f'Palabra AI SDK v{palabra_ai.__version__} installed')"]
         EOF
@@ -130,15 +168,15 @@ jobs:
         # Remove 'draft-' prefix if present for cleaner image name
         IMAGE_BASE_NAME=$(echo "$REPO_NAME" | sed 's/^draft-//')
         IMAGE_NAME=ghcr.io/${OWNER_LOWER}/${IMAGE_BASE_NAME}
-        
+
         docker build -t $IMAGE_NAME:$PACKAGE_VERSION -t $IMAGE_NAME:latest .
-        
+
         # Try to push, but don't fail the whole workflow if it doesn't work
         if docker push $IMAGE_NAME:$PACKAGE_VERSION && docker push $IMAGE_NAME:latest; then
           echo "📦 Successfully pushed Docker images:"
           echo "  - $IMAGE_NAME:$PACKAGE_VERSION"
           echo "  - $IMAGE_NAME:latest"
-        
+
           # Save image name for use in summary
           echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
           echo "IMAGE_VERSION=$PACKAGE_VERSION" >> $GITHUB_ENV
@@ -153,6 +191,10 @@ jobs:
     - name: Release Summary
       run: |
         echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ✅ Pre-release Checks" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tests**: ✅ Passed" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version Sync**: ✅ Completed" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📦 Package Information" >> $GITHUB_STEP_SUMMARY
         echo "- **Repository**: ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
