@@ -196,9 +196,7 @@ MINIMAL_SETTINGS = {
         "translations": [
             {
                 "target_language": "es",
-                "speech_generation": {
-                    "tts_model": "auto",
-                },
+                "speech_generation": {},
             }
         ],
     },
