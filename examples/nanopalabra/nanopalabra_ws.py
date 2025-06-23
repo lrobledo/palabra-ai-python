@@ -108,7 +108,7 @@ async def publish_audio(ws: SimpleWebSocket):
             callback=input_callback,
             blocksize=int(sample_rate * 0.02),
         ):
-            print("🎤 Mic started")
+            print("🎤 Mic started. Please say something!..")
             while not stop_event.is_set():
                 time.sleep(0.01)
 
@@ -196,10 +196,7 @@ MINIMAL_SETTINGS = {
         "translations": [
             {
                 "target_language": "es",
-                "speech_generation": {
-                    "tts_model": "auto",
-                    "voice_timbre_detection": {"enabled": False},
-                },
+                "speech_generation": {},
             }
         ],
     },
@@ -209,7 +206,7 @@ MINIMAL_SETTINGS = {
 ### RUNNER ###
 async def main():
     signal.signal(signal.SIGINT, lambda s, f: os._exit(0))
-    print("🚀 Palabra Client - Minimal")
+    print("🚀 Palabra WebSocket Minimal Client")
 
     # Create session
     session = await create_session(

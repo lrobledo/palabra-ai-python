@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 
+# WebRTC DataChannel version - no WebSocket needed for control
+# Uses LiveKit's DataChannel for all control messages
+
 # We recommend managing dependencies using https://astral.sh/uv/
 # Create a virtual environment and activate it, then sync dependencies:
 # $> `uv venv && . .venv/bin/activate && uv sync`
 # Alternatively, install dependencies directly:
-# $> `uv pip install httpx livekit numpy sounddevice websockets`
+# $> `uv pip install httpx livekit numpy sounddevice`
 
 ### Step 1: Create a Session ###
 import httpx
@@ -81,7 +84,7 @@ async def capture_microphone(audio_source: rtc.AudioSource):
                 time.sleep(0.01)
 
     threading.Thread(target=recording_thread, daemon=True).start()
-    print("🎤 Mic started")
+    print("🎤 Mic started. Please say something!..")
 
     buffer = np.array([], dtype=np.int16)
     while True:
@@ -163,7 +166,7 @@ async def start_translation(room: rtc.Room, translation_settings: dict):
 
     # Send through data channel
     message_bytes = json.dumps(payload).encode("utf-8")
-    await room.local_participant.publish_data(message_bytes, True)
+    await room.local_participant.publish_data(message_bytes, reliable=True)
 
     langs = [
         t["target_language"] for t in translation_settings["pipeline"]["translations"]
@@ -175,7 +178,6 @@ async def start_translation(room: rtc.Room, translation_settings: dict):
 import asyncio
 import json
 import time
-import websockets
 
 # Minimal translation settings
 MINIMAL_SETTINGS = {
@@ -187,40 +189,11 @@ MINIMAL_SETTINGS = {
         "translations": [
             {
                 "target_language": "es",
-                "speech_generation": {
-                    "tts_model": "auto",
-                    "voice_timbre_detection": {"enabled": False},
-                },
+                "speech_generation": {},
             }
         ],
     },
 }
-
-
-# WebSocket handler (for keeping connection alive)
-class SimpleWebSocket:
-    def __init__(self, url: str, token: str):
-        self.url = f"{url}?token={token}"
-        self.ws = None
-
-    async def connect(self):
-        self.ws = await websockets.connect(self.url, ping_interval=10, ping_timeout=30)
-        print("🔌 WebSocket connected")
-        asyncio.create_task(self._receive_loop())
-
-    async def _receive_loop(self):
-        while self.ws:
-            try:
-                msg = await asyncio.wait_for(self.ws.recv(), timeout=60)
-                data = json.loads(msg)
-                if data.get("message_type") == "current_task":
-                    print("📝 Task confirmed")
-            except:
-                pass
-
-    async def send(self, message: dict):
-        if self.ws:
-            await self.ws.send(json.dumps(message))
 
 
 # Wait for translator helper
@@ -260,25 +233,21 @@ import signal
 
 async def main():
     signal.signal(signal.SIGINT, lambda s, f: os._exit(0))
-    print("🚀 Palabra Client - Minimal")
+    print("🚀 Palabra WebRTC Minimal Client")
 
     # Create session
     session = await create_session(
         os.getenv("PALABRA_CLIENT_ID"), os.getenv("PALABRA_CLIENT_SECRET")
     )
     webrtc_url = session["data"]["webrtc_url"]
-    ws_url = session["data"]["ws_url"]
-    publisher = session["data"]["publisher"]
-
-    # Connect WebSocket for keepalive
-    ws = SimpleWebSocket(ws_url, publisher)
-    await ws.connect()
 
     # Connect to room
     room = rtc.Room()
     room.on("track_subscribed", on_track_subscribed)
     room.on("data_received", on_data_received)
-    await room.connect(webrtc_url, publisher, rtc.RoomOptions(auto_subscribe=True))
+    await room.connect(
+        webrtc_url, session["data"]["publisher"], rtc.RoomOptions(auto_subscribe=True)
+    )
 
     # Wait for translator
     try:
@@ -286,10 +255,8 @@ async def main():
     except TimeoutError:
         print("⚠️ No translator, continuing...")
 
-    # Send settings first (before publishing audio)
-    await ws.send({"message_type": "set_task", "data": MINIMAL_SETTINGS})
-    langs = [t["target_language"] for t in MINIMAL_SETTINGS["pipeline"]["translations"]]
-    print(f"⚙️ Settings sent: {langs}")
+    # Send settings through DataChannel
+    await start_translation(room, MINIMAL_SETTINGS)
 
     # Wait for settings to process
     await asyncio.sleep(3)
