@@ -209,7 +209,7 @@ MINIMAL_SETTINGS = {
 ### RUNNER ###
 async def main():
     signal.signal(signal.SIGINT, lambda s, f: os._exit(0))
-    print("🚀 Palabra Client - Minimal")
+    print("🚀 Palabra WebSocket Minimal Client")
 
     # Create session
     session = await create_session(
