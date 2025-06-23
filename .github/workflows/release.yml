@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows: ["Bump Version from Tag"]
     types: [completed]
+    branches: [main]
 
 jobs:
   release:
@@ -17,25 +18,35 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        ref: main  # Always checkout main, then get the latest tag
+        ref: main
+        fetch-depth: 0
 
     - name: Get latest tag
       id: get_tag
       run: |
-        # Get the most recent tag
-        git pull --tags --force
-        TAG_NAME=$(git describe --tags --abbrev=0)
+        # Fetch all tags
+        git fetch --tags --force
+
+        # Get the most recent tag on main branch
+        TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
         if [ -z "$TAG_NAME" ]; then
-          echo "Could not find any tags"
+          echo "❌ Could not find any tags on main branch"
           exit 1
         fi
 
         echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
         echo "Found tag: $TAG_NAME"
 
-        # Checkout the tag
-        git checkout $TAG_NAME
+        # Verify tag is on current commit (should be after version bump)
+        TAG_COMMIT=$(git rev-list -n 1 $TAG_NAME)
+        HEAD_COMMIT=$(git rev-parse HEAD)
+
+        if [ "$TAG_COMMIT" != "$HEAD_COMMIT" ]; then
+          echo "⚠️ Warning: Tag $TAG_NAME is not on current HEAD"
+          echo "Tag commit: $TAG_COMMIT"
+          echo "HEAD commit: $HEAD_COMMIT"
+        fi
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6
