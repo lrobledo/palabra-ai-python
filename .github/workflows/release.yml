@@ -1,15 +1,12 @@
-name: Create Release with Assets
+name: Release from Tag
 
 on:
-  workflow_run:
-    workflows: ["Bump Version from Tag"]
-    types: [completed]
-    branches: [main]
+  push:
+    tags: ['v*']
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     permissions:
       contents: write
       packages: write
@@ -18,35 +15,63 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        ref: main
+        token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
+        # Checkout main branch instead of tag
+        ref: main
 
-    - name: Get latest tag
-      id: get_tag
+    - name: Verify this is a tag event
       run: |
-        # Fetch all tags
-        git fetch --tags --force
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_EVENT_NAME: $GITHUB_EVENT_NAME"
 
-        # Get the most recent tag on main branch
-        TAG_NAME=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-
-        if [ -z "$TAG_NAME" ]; then
-          echo "❌ Could not find any tags on main branch"
+        # Check if this is actually a tag push event
+        if [[ "$GITHUB_EVENT_NAME" != "push" ]]; then
+          echo "❌ This workflow should only run on push events"
           exit 1
         fi
 
-        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
-        echo "Found tag: $TAG_NAME"
+        # Check if ref is a tag
+        if [[ ! "$GITHUB_REF" =~ ^refs/tags/ ]]; then
+          echo "❌ This workflow should only run for tags, got: $GITHUB_REF"
+          exit 1
+        fi
 
-        # Verify tag is on current commit (should be after version bump)
-        TAG_COMMIT=$(git rev-list -n 1 $TAG_NAME)
+        # Extract tag name and check format
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+        if [[ ! "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "❌ Tag must be in format vX.Y.Z, got: $TAG_NAME"
+          exit 1
+        fi
+
+        echo "✅ Valid tag event: $TAG_NAME"
+
+    - name: Check if tag exists on current HEAD
+      run: |
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+
+        # Get latest changes from main
+        git pull origin main
+
+        # Get the commit that the tag points to
+        TAG_COMMIT=$(git rev-list -n 1 $TAG_NAME 2>/dev/null || echo "")
+
+        if [ -z "$TAG_COMMIT" ]; then
+          echo "❌ Tag $TAG_NAME not found"
+          exit 1
+        fi
+
+        # Get current HEAD commit
         HEAD_COMMIT=$(git rev-parse HEAD)
 
+        # Check if tag is on HEAD
         if [ "$TAG_COMMIT" != "$HEAD_COMMIT" ]; then
-          echo "⚠️ Warning: Tag $TAG_NAME is not on current HEAD"
-          echo "Tag commit: $TAG_COMMIT"
-          echo "HEAD commit: $HEAD_COMMIT"
+          echo "❌ Tag $TAG_NAME (commit: $TAG_COMMIT) is not on current HEAD (commit: $HEAD_COMMIT)"
+          echo "Release tags must be created from the latest main branch"
+          exit 1
         fi
+
+        echo "✅ Tag $TAG_NAME is on current HEAD of main branch"
 
     - name: Install uv
       uses: astral-sh/setup-uv@v6
@@ -62,9 +87,98 @@ jobs:
     - name: Install dependencies and run tests
       run: |
         uv sync --all-extras --dev
-        echo "Running tests to ensure code quality before release..."
+        echo "Running tests to ensure code quality..."
         uv run pytest --tb=short -q
         echo "✅ All tests passed!"
+
+    - name: Extract version from tag
+      id: extract_version
+      run: |
+        # Get tag name and remove 'v' prefix
+        TAG_NAME="${GITHUB_REF#refs/tags/}"
+        VERSION="${TAG_NAME#v}"
+        echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Tag: $TAG_NAME, Version: $VERSION"
+
+    - name: Update version in pyproject.toml, __init__.py and uv.lock
+      run: |
+        VERSION="${{ steps.extract_version.outputs.version }}"
+
+        # Update pyproject.toml, __init__.py and uv.lock using Python for safety
+        python << 'EOF'
+        import re
+        import os
+        import time
+
+        version = os.environ.get('VERSION', '${{ steps.extract_version.outputs.version }}')
+
+        # Update pyproject.toml
+        with open('pyproject.toml', 'r') as f:
+            content = f.read()
+        pattern = r'(version\s*=\s*["\'])([0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc|dev)[0-9]+)?)(["\'])'
+        replacement = rf'\g<1>{version}\g<3>'
+        content = re.sub(pattern, replacement, content)
+        with open('pyproject.toml', 'w') as f:
+            f.write(content)
+
+        # Update src/palabra_ai/__init__.py
+        with open('src/palabra_ai/__init__.py', 'r') as f:
+            content = f.read()
+        pattern = r'(__version__\s*=\s*["\'])([0-9]+\.[0-9]+\.[0-9]+(?:(?:a|b|rc|dev)[0-9]+)?)(["\'])'
+        replacement = rf'\g<1>{version}\g<3>'
+        content = re.sub(pattern, replacement, content)
+        with open('src/palabra_ai/__init__.py', 'w') as f:
+            f.write(content)
+
+        # Update uv.lock if it exists
+        if os.path.exists('uv.lock'):
+            with open('uv.lock', 'r') as f:
+                content = f.read()
+            pattern = r'(\[\[package\]\]\s*\nname\s*=\s*"palabra-ai"\s*\nversion\s*=\s*")[^"]+(")'
+            replacement = rf'\g<1>{version}\g<2>'
+            content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+            with open('uv.lock', 'w') as f:
+                f.write(content)
+
+        # Always add a timestamp to ensure file changes
+        os.makedirs('.github', exist_ok=True)
+        with open('.github/.release_timestamp', 'w') as f:
+            f.write(f"Release {version} at {time.strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+        EOF
+
+        # Configure git
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+        # Always commit changes (including timestamp file)
+        git add pyproject.toml src/palabra_ai/__init__.py .github/.release_timestamp
+
+        # Add uv.lock if it exists
+        if [ -f "uv.lock" ]; then
+          git add uv.lock
+        fi
+
+        git commit -m "🔖 Update version to $VERSION for release ${{ steps.extract_version.outputs.tag_name }}"
+
+        echo "✅ Version update commit created"
+
+    - name: Push commit to main and update tag
+      run: |
+        TAG_NAME="${{ steps.extract_version.outputs.tag_name }}"
+
+        # Push the commit to main branch
+        git push origin main
+
+        # Delete the old tag locally and remotely
+        git tag -d $TAG_NAME
+        git push origin :refs/tags/$TAG_NAME
+
+        # Create new tag at current HEAD
+        git tag $TAG_NAME
+        git push origin $TAG_NAME
+
+        echo "✅ Version updated in main and tag $TAG_NAME moved to new commit"
 
     - name: Build package
       run: |
@@ -81,8 +195,8 @@ jobs:
     - name: Get version from tag
       id: get_version
       run: |
-        TAG_NAME="${{ steps.get_tag.outputs.tag_name }}"
-        VERSION="${TAG_NAME#v}"
+        TAG_NAME="${{ steps.extract_version.outputs.tag_name }}"
+        VERSION="${{ steps.extract_version.outputs.version }}"
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
         echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
 
@@ -90,11 +204,6 @@ jobs:
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       # No 'with' parameters needed - OIDC authentication is automatic
-      # The action will:
-      # 1. Request OIDC token from GitHub
-      # 2. Exchange it with PyPI for temporary API token
-      # 3. Upload the package using that token
-      # Your pending publisher configuration will be converted to active publisher on first use
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
