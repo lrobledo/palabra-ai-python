@@ -108,7 +108,7 @@ async def publish_audio(ws: SimpleWebSocket):
             callback=input_callback,
             blocksize=int(sample_rate * 0.02),
         ):
-            print("🎤 Mic started")
+            print("🎤 Mic started. Please say something!..")
             while not stop_event.is_set():
                 time.sleep(0.01)
 
@@ -198,7 +198,6 @@ MINIMAL_SETTINGS = {
                 "target_language": "es",
                 "speech_generation": {
                     "tts_model": "auto",
-                    "voice_timbre_detection": {"enabled": False},
                 },
             }
         ],

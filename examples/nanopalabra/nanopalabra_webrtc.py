@@ -84,7 +84,7 @@ async def capture_microphone(audio_source: rtc.AudioSource):
                 time.sleep(0.01)
 
     threading.Thread(target=recording_thread, daemon=True).start()
-    print("🎤 Mic started")
+    print("🎤 Mic started. Please say something!..")
 
     buffer = np.array([], dtype=np.int16)
     while True:
@@ -191,7 +191,6 @@ MINIMAL_SETTINGS = {
                 "target_language": "es",
                 "speech_generation": {
                     "tts_model": "auto",
-                    "voice_timbre_detection": {"enabled": False},
                 },
             }
         ],
