@@ -2,7 +2,7 @@ name: Create Release with Assets
 
 on:
   workflow_run:
-    workflows: ["BUMP_VERSION_FROM_TAG"]
+    workflows: ["Bump Version from Tag"]
     types: [completed]
     branches: [main]
 

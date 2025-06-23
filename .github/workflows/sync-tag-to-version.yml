@@ -1,4 +1,4 @@
-name: Update Version from Tag
+name: Bump Version from Tag
 
 on:
   push:
