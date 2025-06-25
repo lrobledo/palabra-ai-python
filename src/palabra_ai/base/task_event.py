@@ -1,13 +1,11 @@
 import asyncio
-
-import loguru
-
+from palabra_ai.util.logger import debug
 
 class TaskEvent(asyncio.Event):
     _owner: str = ""
 
     def __init__(self, *args, **kwargs):
-        self._log = loguru.logger
+        # self._log = logger
         super().__init__(*args, **kwargs)
 
     def set_owner(self, owner: str):
@@ -15,7 +13,7 @@ class TaskEvent(asyncio.Event):
 
     def log(self):
         status = "[+] " if self.is_set() else "[-] "
-        self._log.debug(f"{status}{self._owner}")
+        debug(f"{status}{self._owner}")
 
     def __pos__(self):
         self.set()
