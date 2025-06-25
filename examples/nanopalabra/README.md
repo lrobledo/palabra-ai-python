@@ -29,7 +29,7 @@ pip install httpx livekit numpy sounddevice websockets
 
 ### 2. Set your API credentials
 
-Get your credentials from [Palabra AI API](https://palabra.ai/api):
+Get your credentials from [Palabra AI API](https://palabra.ai/api/keys):
 
 ```bash
 export PALABRA_CLIENT_ID=your_client_id

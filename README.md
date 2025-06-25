@@ -406,8 +406,8 @@ from palabra_ai import (
 - ✅ Docker packaging
 - ✅ Python 3.11, 3.12, 3.13 support
 - ✅ PyPI publication (coming soon)
+- ✅ Documentation site (coming soon)
 - ⏳ Code coverage reporting (setup required)
-- ⏳ Documentation site (coming soon)
 
 ### Current Dev Roadmap 🗺️
 - ⏳ TODO: global timeout support for long-running tasks
