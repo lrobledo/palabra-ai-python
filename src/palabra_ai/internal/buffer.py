@@ -134,7 +134,7 @@ class AudioBufferWriter:
     async def write_to_disk(self, file_path: str) -> int:
         try:
             async with aiofile.async_open(file_path, "wb") as f:
-                return await f.write(self.to_wav_bytes())
+                return await f.write(await asyncio.to_thread(self.to_wav_bytes))
         except asyncio.CancelledError:
             warning("AudioBufferWriter write_to_disk cancelled")
             raise

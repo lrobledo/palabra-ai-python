@@ -85,7 +85,7 @@ class BufferWriter(Writer):
             pass
         debug("Finalizing BufferWriter...")
 
-        wav_data = self._buffer_writer.to_wav_bytes()
+        wav_data = await asyncio.to_thread(self._buffer_writer.to_wav_bytes)
         if wav_data:
             self.buffer.seek(0)
             self.buffer.truncate()
