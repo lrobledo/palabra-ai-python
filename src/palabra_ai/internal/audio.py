@@ -1,5 +1,4 @@
 import asyncio
-import errno
 import time
 from fractions import Fraction
 from io import BytesIO
@@ -9,6 +8,16 @@ import av
 import librosa
 import numpy as np
 from aiofile import async_open
+from av.error import (
+    BlockingIOError as AvBlockingIOError,
+)
+from av.error import (
+    EOFError as AvEOFError,
+)
+from av.error import (
+    FFmpegError,
+)
+from av.filter import Graph as FilterGraph
 
 from palabra_ai.util.logger import debug, error
 
@@ -83,7 +92,8 @@ def convert_any_to_pcm16(
         filter_graph_buffer, filter_graph_sink = None, None
         if normalize:
             # create filter graph for `loudnorm` and `speechnorm` filters
-            filter_graph = av.filter.Graph()
+
+            filter_graph = FilterGraph()
             filter_graph_buffer = filter_graph.add_abuffer(
                 format=audio_stream.format.name,
                 sample_rate=audio_stream.rate,
@@ -131,27 +141,29 @@ def convert_any_to_pcm16(
                         dts += processed_frame.samples
                         for packet in audio_stream.encode(processed_frame):
                             output_container.mux(packet)
-                    except av.AVError as e:
-                        if e.errno == errno.EAGAIN:
-                            break
+                    except AvBlockingIOError:
+                        break
+                    except FFmpegError:
                         raise
-            except av.AVError as e:
-                if e.type != "EOF":
-                    raise
+            except AvEOFError:
+                pass  # EOF is expected when flushing
+            except FFmpegError:
+                raise
 
         # flush encoder
         try:
             for packet in audio_stream.encode(None):
                 output_container.mux(packet)
-        except av.AVError as e:
-            if e.type != "EOF":
-                raise
+        except AvEOFError:
+            pass  # EOF is expected when flushing encoder
+        except FFmpegError:
+            raise
 
         output_container.close()
 
         output_buffer.seek(0)
         return output_buffer.read()
-    except av.AVError as e:
+    except FFmpegError as e:
         error("Failed to convert audio using libav with: %s", str(e))
         raise
     finally:
@@ -163,7 +175,7 @@ def pull_until_blocked(graph):
     while True:
         try:
             frames.append(graph.pull())
-        except av.AVError as e:
-            if e.errno != errno.EAGAIN:
-                raise
+        except AvBlockingIOError:
             return frames
+        except FFmpegError:
+            raise

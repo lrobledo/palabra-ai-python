@@ -2,7 +2,6 @@ import asyncio
 import numpy as np
 from unittest.mock import patch, AsyncMock, MagicMock
 from io import BytesIO
-import errno
 
 import pytest
 
@@ -74,7 +73,8 @@ class TestAudio:
 
     def test_convert_any_to_pcm16_error_paths(self, mock_av):
         mock_av.open.side_effect = Exception("Mock error")
-        mock_av.AVError = type('AVError', (Exception,), {})
+        from av.error import FFmpegError
+        mock_av.FFmpegError = FFmpegError
 
         with patch("palabra_ai.internal.audio.time.perf_counter", return_value=1.0):
             with pytest.raises(Exception):
@@ -118,7 +118,7 @@ class TestAudio:
             mock_buffer_node = MagicMock()
             mock_sink_node = MagicMock()
 
-            mock_av.filter.Graph.return_value = mock_graph
+            # Mock FilterGraph that is imported at the top of audio.py
             mock_graph.add_abuffer.return_value = mock_buffer_node
             mock_graph.add.side_effect = [MagicMock(), MagicMock(), mock_sink_node]
 
@@ -127,40 +127,41 @@ class TestAudio:
                 with patch("palabra_ai.internal.audio.BytesIO") as mock_bytesio:
                     mock_bytesio.side_effect = [BytesIO(b"test"), output_bytes]
 
-                    # Create AVError with errno
-                    class MockAVError(Exception):
-                        def __init__(self, *args, **kwargs):
-                            super().__init__(*args)
-                            self.errno = kwargs.get('errno', errno.EAGAIN)
-                            self.type = kwargs.get('type', '')
+                    # Mock the new error types
+                    from av.error import BlockingIOError as AvBlockingIOError, EOFError as AvEOFError, FFmpegError
 
-                    mock_av.AVError = MockAVError
-
+                    # Mock sink pull behavior - create instances of exceptions
                     mock_sink_node.pull.side_effect = [
                         mock_frame,
-                        MockAVError(errno=errno.EAGAIN)
+                        AvBlockingIOError(1, "EAGAIN", "test")
                     ]
 
-                    mock_buffer_node.push.side_effect = [None, MockAVError(type='EOF')]
+                    # Mock buffer push behavior - create instances of exceptions
+                    mock_buffer_node.push.side_effect = [None, AvEOFError(1, "EOF", "test")]
 
-                    result = convert_any_to_pcm16(b"test", normalize=True)
-                    assert isinstance(result, bytes)
+                    # Patch the imported error types in audio module
+                    with patch("palabra_ai.internal.audio.AvBlockingIOError", AvBlockingIOError):
+                        with patch("palabra_ai.internal.audio.AvEOFError", AvEOFError):
+                            with patch("palabra_ai.internal.audio.FilterGraph", return_value=mock_graph):
+                                with patch("palabra_ai.internal.audio.FFmpegError", FFmpegError):
+                                    result = convert_any_to_pcm16(b"test", normalize=True)
+                                    assert isinstance(result, bytes)
 
     def test_pull_until_blocked(self, mock_av):
         mock_graph = MagicMock()
 
-        eagain_error = type('AVError', (Exception,), {'errno': errno.EAGAIN})
-        mock_av.AVError = eagain_error
+        from av.error import BlockingIOError as AvBlockingIOError, FFmpegError
 
-        mock_graph.pull.side_effect = ["frame1", "frame2", eagain_error()]
+        # Test blocking IO error behavior - create instance of exception
+        mock_graph.pull.side_effect = ["frame1", "frame2", AvBlockingIOError(1, "EAGAIN", "test")]
 
-        result = pull_until_blocked(mock_graph)
-        assert result == ["frame1", "frame2"]
+        with patch("palabra_ai.internal.audio.AvBlockingIOError", AvBlockingIOError):
+            with patch("palabra_ai.internal.audio.FFmpegError", FFmpegError):
+                result = pull_until_blocked(mock_graph)
+                assert result == ["frame1", "frame2"]
 
-        # Other error
-        error = type('AVError', (Exception,), {'errno': 999})
-        mock_av.AVError = error
-        mock_graph.pull.side_effect = error()
+                # Test other FFmpeg error - create instance of exception
+                mock_graph.pull.side_effect = FFmpegError(1, "Generic error", "test")
 
-        with pytest.raises(Exception):
-            pull_until_blocked(mock_graph)
+                with pytest.raises(FFmpegError):
+                    pull_until_blocked(mock_graph)
