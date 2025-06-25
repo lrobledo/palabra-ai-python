@@ -48,7 +48,7 @@ class FileReader(Reader):
 
         debug("Converting audio to PCM16 format...")
         try:
-            self._pcm_data = convert_any_to_pcm16(
+            self._pcm_data = await asyncio.to_thread(convert_any_to_pcm16,
                 raw_data, sample_rate=self._track_settings.sample_rate
             )
             debug(f"Converted to {len(self._pcm_data)} bytes")
@@ -122,7 +122,7 @@ class FileWriter(Writer):
 
         wav_data = b""
         try:
-            wav_data = self._buffer_writer.to_wav_bytes()
+            wav_data = await asyncio.to_thread(self._buffer_writer.to_wav_bytes)
             if wav_data:
                 debug(f"Generated {len(wav_data)} bytes of WAV data")
                 await warn_if_cancel(
