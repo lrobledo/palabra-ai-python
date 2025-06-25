@@ -11,7 +11,7 @@ import socket
 import sys
 import sysconfig
 from dataclasses import asdict, dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -48,9 +48,7 @@ class SystemInfo:
 
     # System info
     hostname: str = field(default_factory=socket.gethostname)
-    cpu_count: Optional[int] = field(
-        default_factory=lambda: multiprocessing.cpu_count()
-    )
+    cpu_count: int | None = field(default_factory=lambda: multiprocessing.cpu_count())
 
     # Time info
     timestamp: str = field(default_factory=lambda: datetime.datetime.now().isoformat())
@@ -71,7 +69,7 @@ class SystemInfo:
     resource_limits: dict[str, dict[str, int]] = field(default_factory=dict)
 
     # Locale info
-    locale_info: dict[str, Optional[str]] = field(default_factory=dict)
+    locale_info: dict[str, str | None] = field(default_factory=dict)
 
     # Current process info
     pid: int = field(default_factory=os.getpid)
@@ -81,7 +79,7 @@ class SystemInfo:
     user_info: dict[str, Any] = field(default_factory=dict)
 
     # Python paths
-    python_paths: dict[str, Optional[str]] = field(default_factory=dict)
+    python_paths: dict[str, str | None] = field(default_factory=dict)
 
     def __post_init__(self):
         """Collect additional system information after initialization."""

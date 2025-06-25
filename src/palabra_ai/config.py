@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any, Optional
+from typing import TYPE_CHECKING, Annotated, Any
 
 from environs import Env
 from pydantic import (
@@ -249,8 +249,8 @@ class TargetLang(BaseModel):
     def __init__(
         self,
         lang: LanguageField,
-        writer: Optional[Writer] = None,
-        on_transcription: Optional[T_ON_TRANSCRIPTION] = None,
+        writer: Writer | None = None,
+        on_transcription: T_ON_TRANSCRIPTION | None = None,
         **kwargs,
     ):
         super().__init__(lang=lang, **kwargs)
@@ -262,7 +262,7 @@ class TargetLang(BaseModel):
         self._on_transcription = on_transcription
 
     @property
-    def writer(self) -> Optional[Writer]:
+    def writer(self) -> Writer | None:
         return self._writer
 
     @property

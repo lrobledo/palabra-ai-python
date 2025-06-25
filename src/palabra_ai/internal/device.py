@@ -73,7 +73,7 @@ class InputSoundDevice:
         while self.stream_latency < 0:
             await asyncio.sleep(0.01)
 
-    def stop_reading(self, timeout: tp.Optional[int] = None) -> None:
+    def stop_reading(self, timeout: int | None = None) -> None:
         self.reading_device = False
         self.stream_latency = -1
         if (

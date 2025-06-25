@@ -2,7 +2,8 @@ import asyncio
 import json
 import typing as tp
 
-import websockets
+from websockets.asyncio.client import connect as ws_connect
+from websockets.exceptions import ConnectionClosed
 
 from palabra_ai.base.message import Message
 from palabra_ai.constant import WS_TIMEOUT
@@ -37,7 +38,7 @@ class WebSocketClient:
     async def join(self):
         while self._keep_running:
             try:
-                async with websockets.connect(self._uri) as websocket:
+                async with ws_connect(self._uri) as websocket:
                     self._websocket = websocket
 
                     receive_task = self.tg.create_task(
@@ -63,7 +64,7 @@ class WebSocketClient:
                 debug("WebSocketClient join cancelled")
                 self._keep_running = False
                 raise
-            except websockets.exceptions.WebSocketException as e:
+            except ConnectionClosed as e:
                 if not self._keep_running:
                     debug(f"Connection closed during shutdown: {e}")
                 else:
@@ -84,7 +85,7 @@ class WebSocketClient:
                     break
 
     async def _send_message(self):
-        while self._keep_running and self._websocket and self._websocket.open:
+        while self._keep_running and self._websocket:
             try:
                 try:
                     message = await asyncio.wait_for(
@@ -98,7 +99,7 @@ class WebSocketClient:
             except asyncio.CancelledError:
                 debug("WebSocketClient _send_message cancelled")
                 raise
-            except websockets.exceptions.WebSocketException as e:
+            except ConnectionClosed as e:
                 if self._keep_running:
                     error(f"Unable to send message: {e}")
                 break
@@ -120,17 +121,17 @@ class WebSocketClient:
             debug(f"Failed to decode raw message: {e}")
 
     async def _receive_message(self):
-        while self._keep_running and self._websocket and self._websocket.open:
+        while self._keep_running and self._websocket:
             try:
-                raw_msg = await self._websocket.recv()
-                debug(f"Received message: {raw_msg}")
-                msg = Message.decode(raw_msg)
-                self.ws_out_foq.publish(msg)
-                self.ws_raw_out_foq.publish(self._decode_raw_msg(raw_msg))
+                async for raw_msg in self._websocket:
+                    debug(f"Received message: {raw_msg}")
+                    msg = Message.decode(raw_msg)
+                    self.ws_out_foq.publish(msg)
+                    self.ws_raw_out_foq.publish(self._decode_raw_msg(raw_msg))
             except asyncio.CancelledError:
                 debug("WebSocketClient _receive_message cancelled")
                 raise
-            except websockets.exceptions.WebSocketException as e:
+            except ConnectionClosed as e:
                 if self._keep_running:
                     error(f"Unable to receive message: {e}")
                 break
