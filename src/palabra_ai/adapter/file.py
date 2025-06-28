@@ -48,8 +48,10 @@ class FileReader(Reader):
 
         debug("Converting audio to PCM16 format...")
         try:
-            self._pcm_data = await asyncio.to_thread(convert_any_to_pcm16,
-                raw_data, sample_rate=self._track_settings.sample_rate
+            self._pcm_data = await asyncio.to_thread(
+                convert_any_to_pcm16,
+                raw_data,
+                sample_rate=self._track_settings.sample_rate,
             )
             debug(f"Converted to {len(self._pcm_data)} bytes")
         except Exception as e:

@@ -40,9 +40,17 @@ class TestPalabraRTClient:
         async with asyncio.TaskGroup() as tg:
             client = PalabraRTClient(tg, "token", "wss://control", "wss://stream")
 
+            # Create a mock queue that always returns None (simulating timeout)
+            mock_queue = asyncio.Queue()
+            
+            # Mock the FanoutQueue
+            mock_fanout_queue = MagicMock()
+            mock_fanout_queue.subscribe = MagicMock(return_value=mock_queue)
+            mock_fanout_queue.unsubscribe = MagicMock()
+            
             client.wsc = MagicMock()
             client.wsc.send = AsyncMock()
-            client.wsc.receive = AsyncMock(return_value=None)
+            client.wsc.ws_out_foq = mock_fanout_queue
 
             with pytest.raises(TimeoutError):
                 await client.get_translation_settings(timeout=0.1)
