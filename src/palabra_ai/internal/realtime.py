@@ -6,6 +6,7 @@ from functools import partial
 from livekit import rtc
 
 from ..util.logger import debug, error
+from ._ws_q_tools import mark_received, receive
 from .webrtc import (
     _PALABRA_TRANSLATOR_PARTICIPANT_IDENTITY_PREFIX,
     _PALABRA_TRANSLATOR_TRACK_NAME_PREFIX,
@@ -111,36 +112,43 @@ class PalabraRTClient:
         self, timeout: int | None = None
     ) -> dict[str, tp.Any]:
         start = time.perf_counter()
-        while True:
-            try:
-                debug("PalabraRTClient get_translation_settings sending request")
-                await self.wsc.send({"message_type": "get_task", "data": {}})
-            except asyncio.CancelledError:
-                debug("PalabraRTClient get_translation_settings send cancelled")
-                raise
-
-            if timeout and time.perf_counter() - start > timeout:
-                raise TimeoutError("Timeout waiting for translation cfg")
-
-            try:
-                message = await self.wsc.receive(1)
-            except asyncio.CancelledError:
-                debug("PalabraRTClient get_translation_settings receive cancelled")
-                raise
-
-            if message is None:
+        subscriber_id = "RT.get_translation_settings"
+        try:
+            out_q = self.wsc.ws_out_foq.subscribe(subscriber_id, 5)
+            while True:
                 try:
-                    await asyncio.sleep(0)
+                    debug("PalabraRTClient get_translation_settings sending request")
+                    await self.wsc.send({"message_type": "get_task", "data": {}})
                 except asyncio.CancelledError:
-                    debug("PalabraRTClient get_translation_settings sleep cancelled")
+                    debug("PalabraRTClient get_translation_settings send cancelled")
                     raise
-                continue
 
-            if message["message_type"] == "current_task":
-                self.wsc.mark_received()
-                return message["data"]
+                if timeout and time.perf_counter() - start > timeout:
+                    raise TimeoutError("Timeout waiting for translation cfg")
 
-            await asyncio.sleep(0)
+                try:
+                    message = await receive(out_q, 1)
+                except asyncio.CancelledError:
+                    debug("PalabraRTClient get_translation_settings receive cancelled")
+                    raise
+
+                if message is None:
+                    try:
+                        await asyncio.sleep(0)
+                    except asyncio.CancelledError:
+                        debug(
+                            "PalabraRTClient get_translation_settings sleep cancelled"
+                        )
+                        raise
+                    continue
+
+                if message["message_type"] == "current_task":
+                    mark_received(out_q)
+                    return message["data"]
+
+                await asyncio.sleep(0)
+        finally:
+            self.wsc.ws_out_foq.unsubscribe(subscriber_id)
 
     async def get_translation_languages(self, timeout: int | None = None) -> list[str]:
         _get_trans_settings = self.get_translation_settings

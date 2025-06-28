@@ -1,5 +1,7 @@
 import asyncio
+
 from palabra_ai.util.logger import debug
+
 
 class TaskEvent(asyncio.Event):
     _owner: str = ""

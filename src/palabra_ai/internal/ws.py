@@ -17,19 +17,14 @@ class WebSocketClient:
         tg: asyncio.TaskGroup,
         uri: str,
         token: str,
-        in_q_size: int = 1024,
-        out_q_size: int = 1024,
     ):
         self.tg = tg
         self._uri = f"{uri}?token={token}"
         self._websocket = None
         self._keep_running = True
         self.ws_raw_in_foq = FanoutQueue()
-        self._raw_in_q = self.ws_raw_in_foq.subscribe(self, in_q_size)
+        self._raw_in_q = self.ws_raw_in_foq.subscribe(self)
         self.ws_out_foq = FanoutQueue()
-        # self._out_q = self.ws_out_foq.subscribe(self, out_q_size)
-        self.ws_raw_out_foq = FanoutQueue()
-        self._raw_out_q = self.ws_raw_out_foq.subscribe(self, out_q_size)
         self._task = None
 
     def connect(self):
@@ -127,7 +122,7 @@ class WebSocketClient:
                     debug(f"Received message: {raw_msg}")
                     msg = Message.decode(raw_msg)
                     self.ws_out_foq.publish(msg)
-                    self.ws_raw_out_foq.publish(self._decode_raw_msg(raw_msg))
+                    # self.ws_raw_out_foq.publish(self._decode_raw_msg(raw_msg))
             except asyncio.CancelledError:
                 debug("WebSocketClient _receive_message cancelled")
                 raise
@@ -148,26 +143,6 @@ class WebSocketClient:
         except asyncio.CancelledError:
             debug("WebSocketClient send cancelled")
             raise
-
-    async def receive(
-        self, timeout: int | float | None = None
-    ) -> dict[str, tp.Any] | None:
-        if timeout is None:
-            try:
-                return await self._raw_out_q.get()
-            except asyncio.CancelledError:
-                debug("WebSocketClient receive cancelled")
-                raise
-        try:
-            return await asyncio.wait_for(self._raw_out_q.get(), timeout=timeout)
-        except TimeoutError:
-            return None
-        except asyncio.CancelledError:
-            debug("WebSocketClient receive with timeout cancelled")
-            raise
-
-    def mark_received(self):
-        self._raw_out_q.task_done()
 
     async def close(self, wait_sec: int = 3) -> None:
         if not self._keep_running:

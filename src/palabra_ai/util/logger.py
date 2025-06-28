@@ -1,8 +1,8 @@
 import sys
-from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
-from pathlib import Path
 from dataclasses import dataclass, field
-from functools import wraps
+from logging import DEBUG, INFO, WARNING
+from pathlib import Path
+
 from loguru import logger
 
 
@@ -36,10 +36,12 @@ class Library:
 
     def create_console_filter(self, original_filter):
         """Create a filter that combines library filtering with original."""
+
         def combined_filter(record):
             if not self.should_log(record):
                 return False
             return original_filter(record) if original_filter else True
+
         return combined_filter
 
     def create_file_filter(self):
@@ -110,5 +112,13 @@ exception = logger.exception
 trace = logger.trace
 
 
-__all__ = ["debug", "info", "warning", "error", "critical",
-           "exception", "trace", "set_logging"]
+__all__ = [
+    "debug",
+    "info",
+    "warning",
+    "error",
+    "critical",
+    "exception",
+    "trace",
+    "set_logging",
+]
