@@ -14,7 +14,8 @@ from palabra_ai.debug.hang_coroutines import diagnose_hanging_tasks
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
-from palabra_ai.util.logger import debug, error, warning
+from palabra_ai.util.logger import debug, error
+from palabra_ai.util.logger import success
 
 
 @dataclass
@@ -87,7 +88,7 @@ class PalabraAI:
     async def process(
         self, cfg: Config, stopper: TaskEvent | None = None
     ) -> AsyncIterator[Manager]:
-        warning("🤖 Connecting to Palabra.ai API...")
+        success("🤖 Connecting to Palabra.ai API...")
         if stopper is None:
             stopper = TaskEvent()
 
@@ -111,5 +112,5 @@ class PalabraAI:
                     error(f"Translation failed: {e}")
             raise
         finally:
-            warning("🎉🎉🎉 Translation completed 🎉🎉🎉")
+            success("🎉🎉🎉 Translation completed 🎉🎉🎉")
             debug(diagnose_hanging_tasks())
