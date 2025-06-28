@@ -50,7 +50,7 @@ class ReceiverTranslatedAudio(Task):
                 debug(
                     f"Attempt {i + 1}/{TRACK_RETRY_MAX_ATTEMPTS} to get translation tracks..."
                 )
-                tracks = await self.rt.c.get_translation_tracks(
+                tracks = await self.rt.get_translation_tracks(
                     langs=[self.target_lang.code]  # TODO: know more about this
                 )
                 debug(f"Got tracks response: {list(tracks.keys())}")

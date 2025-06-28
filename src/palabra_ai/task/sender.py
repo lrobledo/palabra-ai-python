@@ -35,7 +35,7 @@ class SenderSourceAudio(Task):
     async def boot(self):
         await self.rt.ready
 
-        self._track = await self.rt.c.new_translated_publication(
+        self._track = await self.rt.new_translated_publication(
             self.translation_settings, self.track_settings
         )
 
