@@ -12,7 +12,10 @@ from palabra_ai.adapter.dummy import DummyReader, DummyWriter  # noqa: F401
 from palabra_ai.adapter.file import FileReader, FileWriter  # noqa: F401
 from palabra_ai.client import PalabraAI  # noqa: F401
 from palabra_ai.config import Config, SourceLang, TargetLang  # noqa: F401
+from palabra_ai.base.message import TranscriptionMessage, Message # noqa: F401
+from palabra_ai.base.enum import MessageType # noqa: F401
 from palabra_ai.lang import (
+    Language,
     AR,
     AR_AE,
     AR_SA,
@@ -79,6 +82,12 @@ __all__ = [
     # Dummy Adapters
     "DummyReader",
     "DummyWriter",
+    # Messages
+    "MessageType",
+    "TranscriptionMessage",
+    "Message",
+    # Language stuff
+    "Language",
     # Languages
     "AR",
     "AR_AE",
