@@ -38,7 +38,7 @@
 3. 🎯 Automatic transcription, translation, and synthesis
 4. 🔊 Real-time audio stream ready for playback
 
-💡 **All this with just a few lines of code!**
+💡 **All with just a few lines of code!**
 
 ## Installation 📦
 
