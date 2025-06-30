@@ -61,6 +61,10 @@ class RtMonitor(Task):
                     if _dedup not in self._dedup:
                         info(repr(msg))
                         self._dedup.add(_dedup)
+                case Message.Type.ERROR:
+                    +self.stopper  # noqa
+                    +self.rt.stopper  # noqa
+                    msg.raise_()
 
     async def exit(self):
         self.rt.out_foq.unsubscribe(self)
