@@ -25,12 +25,11 @@
 - 🎯 Works everywhere - Zoom, streams, events, any platform
 - 🔒 Zero data storage - your conversations stay private
 
-
-🔧 **This SDK focuses on making real-time translation simple and accessible:**
+🔧 **Make real-time translation simple and accessible with the Palabra AI Python SDK:**
 - 🛡️ Uses WebRTC and WebSockets under the hood
 - ⚡ Abstracts away all complexity
 - 🎮 Simple configuration with source/target languages
-- 🎤 Supports various input/output adapters (microphones, speakers, files, buffers)
+- 🎤 Supports multiple input/output adapters (microphones, speakers, files, buffers)
 
 📊 **How it works:**
 1. 🎤 Configure input/output adapters
@@ -101,10 +100,10 @@ config = Config(
 palabra.run(config)
 ```
 
-### Working with transcriptions 📝
+### Customizable output 📝
 
-📋 **You can optionally get transcriptions of the source and translated speech.**  
-⚙️ **Output can be configured to provide:**
+📋 **Add a transcription of the source and translated speech.**  
+⚙️ **Configure output to provide:**
 - 🔊 Audio only
 - 📝 Transcriptions only
 - 🎯 Both audio and transcriptions
@@ -160,7 +159,7 @@ TargetLang(ES, FileWriter("output.wav"))
 TargetLang(ES, on_transcription=your_callback_function)
 ```
 
-3️⃣ **Both audio and transcription**:
+3️⃣ **Audio and transcription**:
 ```python
 TargetLang(ES, FileWriter("output.wav"), on_transcription=your_callback_function)
 ```
@@ -168,7 +167,7 @@ TargetLang(ES, FileWriter("output.wav"), on_transcription=your_callback_function
 💡 **The transcription callbacks receive `TranscriptionMessage` objects containing the transcribed text and metadata.**  
 🔄 **Callbacks can be either synchronous or asynchronous functions.**
 
-### Integration with FFmpeg (streaming) 🎬
+### Integrate with FFmpeg (streaming) 🎬
 
 ```python
 import io
@@ -256,18 +255,18 @@ asyncio.run(translate())
 
 ## I/O Adapters & Mixing 🔌
 
-🎯 **The SDK provides flexible I/O adapters that can be mixed in any combination:**
+### Available adapters 🛠️
 
-### Available Adapters 🛠️
+🎯 **The Palabra AI SDK provides flexible I/O adapters that can combined to:**
 
 - 📁 **FileReader/FileWriter**: Read from and write to audio files
 - 🎤 **DeviceReader/DeviceWriter**: Use microphones and speakers
 - 💾 **BufferReader/BufferWriter**: Work with in-memory buffers
 - 🔧 **RunAsPipe**: Run command and represent as pipe (e.g., FFmpeg stdout)
 
-### Mixing Examples 🎨
+### Mixing examples 🎨
 
-🔄 **You can combine any input adapter with any output adapter:**
+🔄 **Combine any input adapter with any output adapter:**
 
 #### 🎤➡️📁 Microphone to file - record translations
 ```python
@@ -319,15 +318,15 @@ config = Config(
 
 ## Features ✨
 
-### Real-time Translation ⚡
+### Real-time translation ⚡
 🎯 Translate audio streams in real-time with minimal latency  
 💬 Perfect for live conversations, conferences, and meetings
 
-### Voice Cloning 🗣️
+### Voice cloning 🗣️
 🎭 Preserve the original speaker's voice characteristics in translations  
 ⚙️ Enable voice cloning in the configuration
 
-### Device Management 🎮
+### Device management 🎮
 🎤 Easy device selection with interactive prompts or programmatic access:
 
 ```python
@@ -345,15 +344,15 @@ input_devices = dm.get_input_devices()
 output_devices = dm.get_output_devices()
 ```
 
-## Supported Languages 🌍
+## Supported languages 🌍
 
-### Speech Recognition Languages 🎤
+### Speech recognition languages 🎤
 🇸🇦 Arabic (AR), 🇨🇳 Chinese (ZH), 🇨🇿 Czech (CS), 🇩🇰 Danish (DA), 🇳🇱 Dutch (NL), 🇬🇧 English (EN), 🇫🇮 Finnish (FI), 🇫🇷 French (FR), 🇩🇪 German (DE), 🇬🇷 Greek (EL), 🇮🇱 Hebrew (HE), 🇭🇺 Hungarian (HU), 🇮🇹 Italian (IT), 🇯🇵 Japanese (JA), 🇰🇷 Korean (KO), 🇵🇱 Polish (PL), 🇵🇹 Portuguese (PT), 🇷🇺 Russian (RU), 🇪🇸 Spanish (ES), 🇹🇷 Turkish (TR), 🇺🇦 Ukrainian (UK)
 
-### Translation Languages 🔄
+### Translation languages 🔄
 🇸🇦 Arabic (AR), 🇧🇬 Bulgarian (BG), 🇨🇳 Chinese Mandarin (ZH), 🇨🇿 Czech (CS), 🇩🇰 Danish (DA), 🇳🇱 Dutch (NL), 🇬🇧 English UK (EN_GB), 🇺🇸 English US (EN_US), 🇫🇮 Finnish (FI), 🇫🇷 French (FR), 🇩🇪 German (DE), 🇬🇷 Greek (EL), 🇮🇱 Hebrew (HE), 🇭🇺 Hungarian (HU), 🇮🇩 Indonesian (ID), 🇮🇹 Italian (IT), 🇯🇵 Japanese (JA), 🇰🇷 Korean (KO), 🇵🇱 Polish (PL), 🇵🇹 Portuguese (PT), 🇧🇷 Portuguese Brazilian (PT_BR), 🇷🇴 Romanian (RO), 🇷🇺 Russian (RU), 🇸🇰 Slovak (SK), 🇪🇸 Spanish (ES), 🇲🇽 Spanish Mexican (ES_MX), 🇸🇪 Swedish (SV), 🇹🇷 Turkish (TR), 🇺🇦 Ukrainian (UK), 🇻🇳 Vietnamese (VN)
 
-### Available Language Constants 📚
+### Available language constants 📚
 
 ```python
 from palabra_ai import (
@@ -398,9 +397,9 @@ from palabra_ai import (
 )
 ```
 
-## Development Status 🛠️
+## Development status 🛠️
 
-### Current Status ✅
+### Current status ✅
 - ✅ Core SDK functionality
 - ✅ GitHub Actions CI/CD
 - ✅ Docker packaging
@@ -409,13 +408,13 @@ from palabra_ai import (
 - ✅ Documentation site (coming soon)
 - ⏳ Code coverage reporting (setup required)
 
-### Current Dev Roadmap 🗺️
+### Current dev roadmap 🗺️
 - ⏳ TODO: global timeout support for long-running tasks
 - ⏳ TODO: support for multiple source languages in a single run
 - ⏳ TODO: fine cancelling on cancel_all_tasks()
 - ⏳ TODO: error handling improvements
 
-### Build Status 🏗️
+### Build status 🏗️
 - 🧪 **Tests**: Running on Python 3.11, 3.12, 3.13
 - 📦 **Release**: Automated releases with Docker images
 - 📊 **Coverage**: Tests implemented, reporting setup needed
