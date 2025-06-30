@@ -11,7 +11,7 @@ from aioshutdown import SIGHUP, SIGINT, SIGTERM
 from palabra_ai.base.task_event import TaskEvent
 from palabra_ai.config import CLIENT_ID, CLIENT_SECRET, DEEP_DEBUG, Config
 from palabra_ai.debug.hang_coroutines import diagnose_hanging_tasks
-from palabra_ai.exc import ConfigurationError
+from palabra_ai.exc import ConfigurationError, unwrap_exceptions
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
 from palabra_ai.util.logger import debug, error, warning
@@ -102,14 +102,19 @@ class PalabraAI:
             async with asyncio.TaskGroup() as tg:
                 manager = Manager(cfg, credentials, stopper=stopper)(tg)
                 yield manager
+            warning("🎉🎉🎉 Translation completed 🎉🎉🎉")
 
         except* asyncio.CancelledError:
             debug("TaskGroup received CancelledError")
         except* Exception as eg:
-            for e in eg.exceptions:
-                if not isinstance(e, asyncio.CancelledError):
-                    error(f"Translation failed: {e}")
-            raise
+            excs = unwrap_exceptions(eg)
+            excs_wo_cancel = [
+                e for e in excs if not isinstance(e, asyncio.CancelledError)
+            ]
+            for e in excs:
+                error(f"Unhandled exception: {e}")
+            if not excs_wo_cancel:
+                raise excs[0] from eg
+            raise excs_wo_cancel[0] from eg
         finally:
-            warning("🎉🎉🎉 Translation completed 🎉🎉🎉")
             debug(diagnose_hanging_tasks())

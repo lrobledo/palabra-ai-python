@@ -5,6 +5,7 @@ from typing import Any, ClassVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
+from palabra_ai.exc import ApiError, ApiValidationError
 from palabra_ai.lang import Language
 from palabra_ai.util.logger import debug
 
@@ -36,6 +37,7 @@ class Message(BaseModel):
         VALIDATED_TRANSCRIPTION = "validated_transcription"
         PARTIAL_TRANSLATED_TRANSCRIPTION = "partial_translated_transcription"
         PIPELINE_TIMINGS = "pipeline_timings"
+        ERROR = "error"  # For error messages
         _QUEUE_LEVEL = "queue_level"
         _EMPTY = "empty"  # For empty {} messages
         _UNKNOWN = "unknown"  # For unrecognized message formats
@@ -78,6 +80,7 @@ class Message(BaseModel):
         "PipelineTimingsMessage",
         "TranscriptionMessage",
         "UnknownMessage",
+        "ErrorMessage",
     ]:
         """Factory method to create appropriate message type using pattern matching"""
         data = known_raw.data
@@ -103,6 +106,10 @@ class Message(BaseModel):
                     msg_type in cls.STR_TRANSCRIPTION_TYPES
                 ):
                     return TranscriptionMessage.create(known_raw)
+
+                # Error
+                case {"message_type": Message.Type.ERROR.value, "data": _}:
+                    return ErrorMessage.create(known_raw)
 
                 # Pipeline timings
                 case {"message_type": Message.Type.PIPELINE_TIMINGS.value, "data": _}:
@@ -223,6 +230,31 @@ class QueueStatusMessage(Message):
             f"cur={self.current_queue_level_ms}ms, "
             f"max={self.max_queue_level_ms}ms"
         )
+
+
+class ErrorMessage(Message):
+    raw: Any
+    data: dict
+    _exc: ApiError | None = PrivateAttr(default=None)
+
+    @classmethod
+    def create(cls, known_raw: KnownRaw) -> "ErrorMessage":
+        """Create ErrorMessage from KnownRaw with proper data conversion"""
+        obj = cls(
+            message_type=Message.Type.ERROR, raw=known_raw, data={"raw": known_raw}
+        )
+        obj._known_raw = known_raw
+        match known_raw.data:
+            case {"data": {"code": "VALIDATION_ERROR", "desc": desc}}:
+                obj._exc = ApiValidationError(str(desc))
+                obj.data = known_raw.data
+            case _:
+                obj._exc = ApiError(str(known_raw.data))
+                print(f"Not a dict: {type(known_raw).__name__}")
+        return obj
+
+    def raise_(self):
+        raise self._exc or ApiError("Unknown error occurred")
 
 
 class UnknownMessage(Message):
