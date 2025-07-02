@@ -25,7 +25,7 @@
 - 🎯 Works everywhere - Zoom, streams, events, any platform
 - 🔒 Zero data storage - your conversations stay private
 
-🔧 **Make real-time translation simple and accessible with the Palabra AI Python SDK:**
+🔧 **This SDK focuses on making real-time translation simple and accessible:**
 - 🛡️ Uses WebRTC and WebSockets under the hood
 - ⚡ Abstracts away all complexity
 - 🎮 Simple configuration with source/target languages
