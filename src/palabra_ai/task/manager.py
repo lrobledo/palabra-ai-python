@@ -27,6 +27,7 @@ from palabra_ai.task.sender import SenderSourceAudio
 from palabra_ai.task.stat import Stat
 from palabra_ai.task.transcription import Transcription
 from palabra_ai.util.logger import debug, warning
+from palabra_ai.util.logger import success
 
 
 @dataclass
@@ -169,7 +170,7 @@ class Manager(Task):
             ) from e
 
     async def do(self):
-        warning("🚀🚀🚀 Starting translation process 🚀🚀🚀")
+        success("🚀🚀🚀 Starting translation process 🚀🚀🚀")
         while not self.stopper:
             try:
                 await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
@@ -185,7 +186,7 @@ class Manager(Task):
                 except asyncio.CancelledError:
                     debug(f"🔚 {self.name}.do() sleep cancelled, exiting...")
                 debug(f"🔚 {self.name}.do() received EOF or stopper, exiting...")
-                warning("🏁 Done! ⏻ Shutting down...")
+                success("🏁 Done! ⏻ Shutting down...")
                 break
         +self.stopper  # noqa
         await self.graceful_exit()

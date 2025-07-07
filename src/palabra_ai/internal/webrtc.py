@@ -1,10 +1,15 @@
 import asyncio
 import uuid
+from dataclasses import dataclass
 
 import numpy as np
 from livekit import rtc
 
+from palabra_ai.base.enum import Channel
+from palabra_ai.base.enum import Direction
+from palabra_ai.base.message import Dbg
 from palabra_ai.base.message import Message
+from palabra_ai.base.task import Task
 from palabra_ai.util.fanout_queue import FanoutQueue
 from palabra_ai.util.logger import debug, error
 
@@ -48,7 +53,6 @@ class AudioTrackSettings:
         return rtc.AudioFrame.create(
             self.sample_rate, self.num_channels, self.chunk_size
         )
-
 
 class AudioPublication:
     def __init__(self, room_client: "RoomClient", track_settings: AudioTrackSettings):
@@ -124,6 +128,9 @@ class AudioPublication:
 class RoomClient(rtc.Room):
     def __init__(
         self,
+        url: str,
+        token: str,
+        options: rtc.RoomOptions | None = None,
         loop: asyncio.AbstractEventLoop | None = None,
     ):
         default_callbacks = [
@@ -150,17 +157,19 @@ class RoomClient(rtc.Room):
         super().__init__(loop=loop)
         self.out_foq = FanoutQueue()
         self._publications: list[AudioPublication] = []
+        self.__url = url
+        self.__token = token
+        options = options if options is not None else rtc.RoomOptions()
+        self.__options = options
         for event, callback in default_callbacks:
             self.on(event, callback)
 
     async def connect(
-        self, url: str, token: str, options: rtc.RoomOptions | None = None
+        self
     ):
-        options = options if options is not None else rtc.RoomOptions()
-
-        debug("connecting to %s", url)
+        debug("connecting to %s", self.__url)
         try:
-            await super().connect(url, token, options=options)
+            await super().connect(self.__url, self.__token, options=self.__options)
             debug("connected to room %s", self.name)
         except asyncio.CancelledError:
             debug("RoomClient connect cancelled")
@@ -268,7 +277,8 @@ class RoomClient(rtc.Room):
         debug("received data from %s: %s", data.participant.identity, data.data)
         # Publish to fanout queue
         debug(f"Received packet: {data}"[:100])
-        msg = Message.decode(data.data)
+        dbg = Dbg(Channel.WEBRTC, Direction.OUT)
+        msg = Message.decode(data.data, dbg=dbg)
         self.out_foq.publish(msg)
 
     def on_track_published(

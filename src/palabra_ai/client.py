@@ -14,7 +14,8 @@ from palabra_ai.debug.hang_coroutines import diagnose_hanging_tasks
 from palabra_ai.exc import ConfigurationError, unwrap_exceptions
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
-from palabra_ai.util.logger import debug, error, warning
+from palabra_ai.util.logger import debug, error
+from palabra_ai.util.logger import success
 
 
 @dataclass
@@ -87,7 +88,7 @@ class PalabraAI:
     async def process(
         self, cfg: Config, stopper: TaskEvent | None = None
     ) -> AsyncIterator[Manager]:
-        warning("🤖 Connecting to Palabra.ai API...")
+        success("🤖 Connecting to Palabra.ai API...")
         if stopper is None:
             stopper = TaskEvent()
 
@@ -117,4 +118,5 @@ class PalabraAI:
                 raise excs[0] from eg
             raise excs_wo_cancel[0] from eg
         finally:
+            success("🎉🎉🎉 Translation completed 🎉🎉🎉")
             debug(diagnose_hanging_tasks())

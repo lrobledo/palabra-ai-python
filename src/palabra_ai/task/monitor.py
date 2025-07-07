@@ -29,7 +29,7 @@ class RtMonitor(Task):
     _dedup: CappedSet[str] = field(default_factory=partial(CappedSet, 100), init=False)
 
     def __post_init__(self):
-        self.q = self.rt.out_foq.subscribe(self, maxsize=0)
+        self.q = self.rt.out_foq.subscribe(self, maxsize=0).q
 
     @property
     def silence(self) -> bool:

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import time
+from dataclasses import asdict
 from dataclasses import KW_ONLY, dataclass, field
 
 import palabra_ai
+from palabra_ai.base.message import Dbg
 from palabra_ai.base.task import Task
 from palabra_ai.config import (
     Config,
@@ -14,7 +16,8 @@ from palabra_ai.constant import (
     SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
 )
-from palabra_ai.task.realtime import Realtime, RtMsg
+from palabra_ai.task.realtime import Realtime
+from palabra_ai.util.fanout_queue import Subscription
 from palabra_ai.util.logger import debug
 from palabra_ai.util.orjson import to_json
 from palabra_ai.util.sysinfo import get_system_info
@@ -27,23 +30,23 @@ class Logger(Task):
     cfg: Config
     rt: Realtime
     _: KW_ONLY
-    _messages: list[RtMsg] = field(default_factory=list, init=False)
+    _messages: list[dict] = field(default_factory=list, init=False)
     _start_ts: float = field(default_factory=time.time, init=False)
-    _rt_in_q: asyncio.Queue | None = field(default=None, init=False)
-    _rt_out_q: asyncio.Queue | None = field(default=None, init=False)
+    _rt_in_sub: Subscription | None = field(default=None, init=False)
+    _rt_out_sub: Subscription | None = field(default=None, init=False)
     _in_task: asyncio.Task | None = field(default=None, init=False)
     _out_task: asyncio.Task | None = field(default=None, init=False)
 
     def __post_init__(self):
-        self._rt_in_q = self.rt.in_foq.subscribe(self, maxsize=0)
-        self._rt_out_q = self.rt.out_foq.subscribe(self, maxsize=0)
+        self._rt_in_sub = self.rt.in_foq.subscribe(self, maxsize=0)
+        self._rt_out_sub = self.rt.out_foq.subscribe(self, maxsize=0)
 
     async def boot(self):
         self._in_task = self.sub_tg.create_task(
-            self._consume(self._rt_in_q), name="Logger:rt_in"
+            self._consume(self._rt_in_sub.q), name="Logger:rt_in"
         )
         self._out_task = self.sub_tg.create_task(
-            self._consume(self._rt_out_q), name="Logger:rt_out"
+            self._consume(self._rt_out_sub.q), name="Logger:rt_out"
         )
         debug(f"Logger started, writing to {self.cfg.log_file}")
 
@@ -106,11 +109,14 @@ class Logger(Task):
         """Process WebSocket messages."""
         while not self.stopper:
             try:
-                rt_msg = await asyncio.wait_for(q.get(), timeout=QUEUE_READ_TIMEOUT)
-                if rt_msg is None:
+                msg = await asyncio.wait_for(q.get(), timeout=QUEUE_READ_TIMEOUT)
+                if msg is None:
                     debug(f"Received None from {q}, stopping consumer")
                     break
-                self._messages.append(rt_msg)
+
+                dbg_msg = getattr(msg, "_dbg", asdict(Dbg.empty()))
+                dbg_msg["msg"] = msg.model_dump()
+                self._messages.append(dbg_msg)
                 q.task_done()
             except TimeoutError:
                 continue

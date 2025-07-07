@@ -1,9 +1,14 @@
 import json
+import time
 from dataclasses import dataclass
+from dataclasses import field
 from enum import StrEnum
 from typing import Any, ClassVar, Union
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+
+from palabra_ai.base.enum import Channel
+from palabra_ai.base.enum import Direction
 
 from palabra_ai.exc import ApiError, ApiValidationError
 from palabra_ai.lang import Language
@@ -19,10 +24,23 @@ class KnownRawType(StrEnum):
 
 
 @dataclass
+class Dbg:
+    ch: Channel | None
+    dir: Direction | None
+    ts: float = field(default_factory=time.time)
+
+    @classmethod
+    def empty(cls):
+        """Create an empty debug object"""
+        return cls(ch=None, dir=None, ts=time.time())
+
+
+@dataclass
 class KnownRaw:
     type: KnownRawType
     data: str | bytes | dict | None
     exc: Exception | None = None
+    dbg: Dbg | None = None
 
 
 class Message(BaseModel):
@@ -38,6 +56,8 @@ class Message(BaseModel):
         PARTIAL_TRANSLATED_TRANSCRIPTION = "partial_translated_transcription"
         PIPELINE_TIMINGS = "pipeline_timings"
         ERROR = "error"  # For error messages
+        END_TASK = "end_task"  # For end_task messages
+        SET_TASK = "set_task"  # For set_task messages
         _QUEUE_LEVEL = "queue_level"
         _EMPTY = "empty"  # For empty {} messages
         _UNKNOWN = "unknown"  # For unrecognized message formats
@@ -169,9 +189,10 @@ class Message(BaseModel):
         return KnownRaw(KnownRawType.unknown, raw_msg)
 
     @classmethod
-    def decode(cls, raw_msg: str | bytes | None) -> "Message":
+    def decode(cls, raw_msg: str | bytes | None, dbg: Dbg|None = None) -> "Message":
         # debug(raw_msg)
         known_msg = cls.detect(raw_msg)
+        known_msg.dbg = dbg
         # debug(known_msg)
         if known_msg.type == KnownRawType.json:
             return cls.from_detected(known_msg)
@@ -189,6 +210,31 @@ class EmptyMessage(Message):
 
     def __str__(self) -> str:
         return "⚪"
+
+
+class EndTaskMessage(Message):
+    ### {"message_type": "end_task", "data": {"force": True}}
+    """End task message"""
+    type_: Message.Type = Field(default=Message.Type.END_TASK, alias="message_type")
+    force: bool = Field(default=False, description="Force end the task")
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return {
+            "message_type": self.type_.value,
+            "data": {"force": self.force},
+        }
+
+class SetTaskMessage(Message):
+    """Set task message"""
+    type_: Message.Type = Field(default=Message.Type.SET_TASK, alias="message_type")
+    data: dict[str, Any] = Field(default_factory=dict, description="Task configuration data")
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return {
+            "message_type": self.type_.value,
+            "data": self.data,
+        }
+
 
 
 class QueueStatusMessage(Message):
