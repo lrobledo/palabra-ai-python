@@ -108,9 +108,9 @@ class WebRtcMode(IoMode):
 
 class WsMode(IoMode):
     name: str = "ws"
-    sample_rate: int = 16000
+    sample_rate: int = 24000
     num_channels: int = 1
-    chunk_duration_ms: int = 20
+    chunk_duration_ms: int = 320
 
     def model_dump(self, *args, **kwargs) -> dict[str, Any]:
         return {
@@ -343,7 +343,7 @@ class Config(BaseModel):
     translation_queue_configs: QueueConfigs = Field(default_factory=QueueConfigs)
     allowed_message_types: list[str] = [mt.value for mt in Message.ALLOWED_TYPES]
 
-    mode: IoMode = Field(default_factory=WebRtcMode, exclude=True)
+    mode: IoMode = Field(default_factory=WsMode, exclude=True)
     silent: bool = Field(default=SILENT, exclude=True)
     log_file: Path | str | None = Field(default=LOG_FILE, exclude=True)
     debug: bool = Field(default=DEBUG, exclude=True)

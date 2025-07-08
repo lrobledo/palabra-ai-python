@@ -23,11 +23,9 @@ from palabra_ai.internal.rest import SessionCredentials
 from palabra_ai.task.io.base import Io
 
 from palabra_ai.task.io.webrtc import WebrtcIo
+from palabra_ai.task.io.ws import WsIo
 from palabra_ai.task.logger import Logger
-from palabra_ai.task.monitor import IoMon
-# from palabra_ai.task.realtime import Realtime
-# from palabra_ai.task.receiver import ReceiverTranslatedAudio
-# from palabra_ai.task.sender import SenderSourceAudio
+
 from palabra_ai.task.stat import Stat
 from palabra_ai.task.transcription import Transcription
 from palabra_ai.util.logger import debug, warning
@@ -98,7 +96,7 @@ class Manager(Task):
 
 
         if not self.io_class:
-            io_classes = {"webrtc": WebrtcIo,
+            io_classes = {"webrtc": WebrtcIo, "ws": WsIo,
                           # IoMode.WS: WsIo, IoMode.MIXED: MixedIo
                           }
             self.io_class = io_classes.get(self.cfg.mode.name)
