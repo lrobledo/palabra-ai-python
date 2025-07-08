@@ -11,15 +11,16 @@ from palabra_ai.config import (
     Config,
 )
 from palabra_ai.constant import EMPTY_MESSAGE_THRESHOLD, MONITOR_TIMEOUT
-from palabra_ai.task.realtime import Realtime
+# from palabra_ai.task.realtime import Realtime
+from palabra_ai.task.io.base import Io
 from palabra_ai.util.capped_set import CappedSet
 from palabra_ai.util.logger import debug, info
 
 
 @dataclass
-class RtMonitor(Task):
+class IoMon(Task):
     cfg: Config
-    rt: Realtime
+    io: Io
     _: KW_ONLY
     q: asyncio.Queue = field(init=False)
     msg_history: deque[Message] = field(
@@ -29,7 +30,7 @@ class RtMonitor(Task):
     _dedup: CappedSet[str] = field(default_factory=partial(CappedSet, 100), init=False)
 
     def __post_init__(self):
-        self.q = self.rt.out_foq.subscribe(self, maxsize=0).q
+        self.q = self.io.out_foq.subscribe(self, maxsize=0).q
 
     @property
     def silence(self) -> bool:
@@ -38,7 +39,7 @@ class RtMonitor(Task):
         )
 
     async def boot(self):
-        await self.rt.ready
+        await self.io.ready
 
     async def do(self):
         while not self.stopper:
@@ -63,8 +64,8 @@ class RtMonitor(Task):
                         self._dedup.add(_dedup)
                 case Message.Type.ERROR:
                     +self.stopper  # noqa
-                    +self.rt.stopper  # noqa
+                    +self.io.stopper  # noqa
                     msg.raise_()
 
     async def exit(self):
-        self.rt.out_foq.unsubscribe(self)
+        self.io.out_foq.unsubscribe(self)

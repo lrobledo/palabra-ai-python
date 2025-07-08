@@ -6,6 +6,7 @@ from pathlib import Path
 
 from palabra_ai.adapter._common import warn_if_cancel
 from palabra_ai.base.adapter import Reader, Writer
+from palabra_ai.constant import CHUNK_SIZE
 from palabra_ai.constant import SLEEP_INTERVAL_DEFAULT
 from palabra_ai.internal.audio import (
     convert_any_to_pcm16,
@@ -13,7 +14,7 @@ from palabra_ai.internal.audio import (
     write_to_disk,
 )
 from palabra_ai.internal.buffer import AudioBufferWriter
-from palabra_ai.internal.webrtc import AudioTrackSettings
+# from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.util.logger import debug, error, warning
 
 
@@ -26,20 +27,14 @@ class FileReader(Reader):
 
     _pcm_data: bytes | None = None
     _position: int = 0
-    _track_settings: AudioTrackSettings | None = None
+
 
     def __post_init__(self):
         self.path = Path(self.path)
         if not self.path.exists():
             raise FileNotFoundError(f"File not found: {self.path}")
 
-    def set_track_settings(self, track_settings: AudioTrackSettings) -> None:
-        self._track_settings = track_settings
-
     async def boot(self):
-        if not self._track_settings:
-            self._track_settings = AudioTrackSettings()
-
         debug(f"Loading and converting audio file {self.path}...")
         raw_data = await warn_if_cancel(
             read_from_disk(self.path), "FileReader read_from_disk cancelled"
@@ -51,7 +46,7 @@ class FileReader(Reader):
             self._pcm_data = await asyncio.to_thread(
                 convert_any_to_pcm16,
                 raw_data,
-                sample_rate=self._track_settings.sample_rate,
+                sample_rate=self.cfg.mode.sample_rate,
             )
             debug(f"Converted to {len(self._pcm_data)} bytes")
         except Exception as e:
@@ -69,9 +64,8 @@ class FileReader(Reader):
         else:
             debug(f"{self.name} reached EOF at position {self._position}")
 
-    async def read(self, size: int | None = None) -> bytes | None:
+    async def read(self, size: int = CHUNK_SIZE) -> bytes | None:
         await self.ready
-        size = size or self.chunk_size
 
         if self._position >= len(self._pcm_data):
             debug(f"EOF reached at position {self._position}")

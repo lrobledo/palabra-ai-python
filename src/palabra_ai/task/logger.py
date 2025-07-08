@@ -16,7 +16,8 @@ from palabra_ai.constant import (
     SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
 )
-from palabra_ai.task.realtime import Realtime
+from palabra_ai.task.io.base import Io
+# from palabra_ai.task.realtime import Realtime
 from palabra_ai.util.fanout_queue import Subscription
 from palabra_ai.util.logger import debug
 from palabra_ai.util.orjson import to_json
@@ -28,7 +29,7 @@ class Logger(Task):
     """Logs all WebSocket and WebRTC messages to files."""
 
     cfg: Config
-    rt: Realtime
+    io: Io
     _: KW_ONLY
     _messages: list[dict] = field(default_factory=list, init=False)
     _start_ts: float = field(default_factory=time.time, init=False)

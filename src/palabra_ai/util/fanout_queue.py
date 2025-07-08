@@ -25,7 +25,9 @@ class FanoutQueue(Generic[T]):
             return subscriber
         elif isinstance(subscriber, object):
             # Use the object's id if it's not a string
-            return str(id(subscriber))
+            if name := getattr(subscriber, 'name', None):
+                return f"{name}_{id(subscriber)}"
+            return f"{type(subscriber)}_{id(subscriber)}"
         else:
             raise TypeError(f"Subscriber must be a string or an object, got: {type(subscriber)}")
 
@@ -93,6 +95,7 @@ class FanoutQueue(Generic[T]):
             stopper: TaskEvent to signal when to stop receiving messages
             timeout: Optional timeout for waiting on messages (prevents hanging)
         """
+        subscriber_id = self._get_id(subscriber)
 
         async def message_generator(subscription: Subscription) -> AsyncGenerator[T, None]:
             """Inner generator for messages"""
@@ -115,29 +118,29 @@ class FanoutQueue(Generic[T]):
 
                 except asyncio.TimeoutError:
                     # Timeout reached, check if we should continue
-                    if self._closed or not self.is_subscribed(subscriber) or stopper:
-                        debug(f"Subscriber {subscriber} stopping due to timeout and closed/unsubscribed state")
+                    if self._closed or not self.is_subscribed(subscriber_id) or stopper:
+                        debug(f"Subscriber {subscriber_id} stopping due to timeout and closed/unsubscribed state")
                         break
                     # Otherwise continue waiting
 
-        debug(f"Starting subscriber {subscriber}")
+        debug(f"Starting subscriber {subscriber_id}")
 
         # Subscribe
-        q = self.subscribe(subscriber, maxsize=0)
-        subscription = self.subscribers[subscriber]
+        q = self.subscribe(subscriber_id, maxsize=0)
+        subscription = self.subscribers[subscriber_id]
         generator = message_generator(subscription)
 
         try:
             yield generator
         finally:
-            debug(f"Cleaning up subscriber {subscriber}")
+            debug(f"Cleaning up subscriber {subscriber_id}")
 
             # CORRECT ORDER:
             # 1. First unsubscribe (sends None to queue)
-            self.unsubscribe(subscriber)
+            self.unsubscribe(subscriber_id)
 
             # 2. Then close generator
             await generator.aclose()
 
-            debug(f"Cleanup done for subscriber {subscriber}")
+            debug(f"Cleanup done for subscriber {subscriber_id}")
 

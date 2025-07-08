@@ -18,7 +18,7 @@ from palabra_ai.constant import (
     THREADPOOL_MAX_WORKERS,
 )
 from palabra_ai.internal.device import SoundDeviceManager
-from palabra_ai.internal.webrtc import AudioTrackSettings
+# from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.util.logger import debug, error, warning
 
 
@@ -158,9 +158,9 @@ class DeviceReader(Reader):
     device: Device | str
     _: KW_ONLY
 
-    track_settings: AudioTrackSettings | None = field(
-        default_factory=AudioTrackSettings
-    )
+    # track_settings: AudioTrackSettings | None = field(
+    #     default_factory=AudioTrackSettings
+    # )
     sdm: SoundDeviceManager = field(default_factory=SoundDeviceManager)
     tg: asyncio.TaskGroup | None = field(default=None, init=False)
 

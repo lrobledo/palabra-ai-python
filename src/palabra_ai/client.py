@@ -16,6 +16,7 @@ from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
 from palabra_ai.util.logger import debug, error
 from palabra_ai.util.logger import success
+from palabra_ai.util.logger import warning
 
 
 @dataclass
@@ -103,7 +104,7 @@ class PalabraAI:
             async with asyncio.TaskGroup() as tg:
                 manager = Manager(cfg, credentials, stopper=stopper)(tg)
                 yield manager
-            warning("🎉🎉🎉 Translation completed 🎉🎉🎉")
+            success("🎉🎉🎉 Translation completed 🎉🎉🎉")
 
         except* asyncio.CancelledError:
             debug("TaskGroup received CancelledError")

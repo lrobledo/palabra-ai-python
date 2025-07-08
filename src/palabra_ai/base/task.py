@@ -1,13 +1,16 @@
 import abc
 import asyncio
 from dataclasses import KW_ONLY, dataclass, field
+from typing import TYPE_CHECKING
 
 from palabra_ai.base.task_event import TaskEvent
-from palabra_ai.config import DEEP_DEBUG
+
 from palabra_ai.constant import SHUTDOWN_TIMEOUT
 from palabra_ai.util.emoji import Emoji
 from palabra_ai.util.logger import debug, error, warning
 
+if TYPE_CHECKING:
+    from palabra_ai.config import Config
 
 @dataclass
 class Task(abc.ABC):
@@ -55,6 +58,8 @@ class Task(abc.ABC):
                 except Exception as e:
                     self._state.append("💥")
                     error(f"{self.name}.run() failed with error: {e}, exiting...")
+                    self.sub_tg._abort()
+                    self.root_tg._abort()
                     raise
         finally:
             +self.stopper  # noqa
@@ -126,6 +131,7 @@ class Task(abc.ABC):
         return self._task
 
     def __str__(self):
+        from palabra_ai.config import DEEP_DEBUG
         ready = Emoji.bool(self.ready)
         stopper = Emoji.bool(self.stopper)
         eof = Emoji.bool(self.eof)
@@ -134,3 +140,16 @@ class Task(abc.ABC):
             return f"{self.name:>28}(ready={ready}, stopper={stopper}, eof={eof}, states={states})"
         else:
             return f"{self.name:>28}🎬{ready} 🪦{stopper} 🏁{eof} {states}"
+
+    def dbg(self, msg: str):
+        debug(f"{self.name}: {msg}")
+
+    def err(self, msg: str):
+        error(f"{self.name}: {msg}")
+
+    def warn(self, msg: str):
+        warning(f"{self.name}: {msg}")
+
+    def inf(self, msg: str):
+        debug(f"{self.name}: {msg}")
+

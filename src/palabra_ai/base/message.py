@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from dataclasses import field
 from enum import StrEnum
 from typing import Any, ClassVar, Union
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
@@ -13,6 +14,9 @@ from palabra_ai.base.enum import Direction
 from palabra_ai.exc import ApiError, ApiValidationError
 from palabra_ai.lang import Language
 from palabra_ai.util.logger import debug
+
+if TYPE_CHECKING:
+    from palabra_ai.config import Config
 
 
 class KnownRawType(StrEnum):
@@ -40,7 +44,6 @@ class KnownRaw:
     type: KnownRawType
     data: str | bytes | dict | None
     exc: Exception | None = None
-    dbg: Dbg | None = None
 
 
 class Message(BaseModel):
@@ -48,6 +51,7 @@ class Message(BaseModel):
 
     type_: "Message.Type" = Field(alias="message_type")
     _known_raw: KnownRaw | None = PrivateAttr(default=None)
+    _dbg: Dbg | None = PrivateAttr(default=None)
 
     class Type(StrEnum):
         PARTIAL_TRANSCRIPTION = "partial_transcription"
@@ -58,6 +62,8 @@ class Message(BaseModel):
         ERROR = "error"  # For error messages
         END_TASK = "end_task"  # For end_task messages
         SET_TASK = "set_task"  # For set_task messages
+        GET_TASK = "get_task"  # For get_task messages
+        CURRENT_TASK = "current_task"  # For current_task messages
         _QUEUE_LEVEL = "queue_level"
         _EMPTY = "empty"  # For empty {} messages
         _UNKNOWN = "unknown"  # For unrecognized message formats
@@ -135,6 +141,9 @@ class Message(BaseModel):
                 case {"message_type": Message.Type.PIPELINE_TIMINGS.value, "data": _}:
                     return PipelineTimingsMessage.create(known_raw)
 
+                case {"message_type": Message.Type.CURRENT_TASK.value, "data": _}:
+                    return CurrentTaskMessage.create(known_raw)
+
                 # Queue status: non-empty dict without message_type
                 case dict() as d if d and "message_type" not in d and len(d) == 1:
                     [(lang, val)] = d.items()
@@ -189,10 +198,9 @@ class Message(BaseModel):
         return KnownRaw(KnownRawType.unknown, raw_msg)
 
     @classmethod
-    def decode(cls, raw_msg: str | bytes | None, dbg: Dbg|None = None) -> "Message":
+    def decode(cls, raw_msg: str | bytes | None) -> "Message":
         # debug(raw_msg)
         known_msg = cls.detect(raw_msg)
-        known_msg.dbg = dbg
         # debug(known_msg)
         if known_msg.type == KnownRawType.json:
             return cls.from_detected(known_msg)
@@ -229,12 +237,25 @@ class SetTaskMessage(Message):
     type_: Message.Type = Field(default=Message.Type.SET_TASK, alias="message_type")
     data: dict[str, Any] = Field(default_factory=dict, description="Task configuration data")
 
+    @classmethod
+    def from_config(cls, cfg: "Config"):
+        return cls(data=cfg.to_dict())
+
     def model_dump(self, **kwargs) -> dict[str, Any]:
         return {
             "message_type": self.type_.value,
             "data": self.data,
         }
 
+class GetTaskMessage(Message):
+    """Get task message"""
+    type_: Message.Type = Field(default=Message.Type.GET_TASK, alias="message_type")
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return {
+            "message_type": self.type_.value,
+            "data": {},
+        }
 
 
 class QueueStatusMessage(Message):
@@ -440,3 +461,26 @@ class TranscriptionMessage(Message):
 
     def __str__(self) -> str:
         return self.text
+
+
+class CurrentTaskMessage(Message):
+    """Current task message"""
+
+    type_: Message.Type = Field(default=Message.Type.CURRENT_TASK, alias="message_type")
+    data: dict[str, Any] = Field(default_factory=dict, description="Current task data")
+
+    @model_validator(mode="before")
+    @classmethod
+    def extract_from_nested(cls, values: dict[str, Any]) -> dict[str, Any]:
+        if "data" in values and "message_type" in values:
+            return {
+                "message_type": values["message_type"],
+                "data": values["data"],
+            }
+        return values
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return {
+            "message_type": self.type_.value,
+            "data": self.data,
+        }

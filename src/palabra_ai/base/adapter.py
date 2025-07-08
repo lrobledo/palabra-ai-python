@@ -3,23 +3,30 @@ from __future__ import annotations
 import abc
 import asyncio
 from dataclasses import KW_ONLY, dataclass, field
+from typing import TYPE_CHECKING
+
+
 from typing import Optional
 
-from livekit.rtc import AudioFrame
+
 
 from palabra_ai.base.task import Task
 from palabra_ai.base.task_event import TaskEvent
 from palabra_ai.constant import CHUNK_SIZE
 
+if TYPE_CHECKING:
+    from palabra_ai.base.audio import AudioFrame
+    from palabra_ai.config import Config
+
 
 @dataclass
 class Reader(Task):
     """Abstract PCM audio reader process."""
-
     _: KW_ONLY
-    sender: Optional["palabra_ai.task.sender.SenderSourceAudio"] = None  # noqa
-    q: asyncio.Queue[bytes] = field(default_factory=asyncio.Queue)
-    chunk_size: int = CHUNK_SIZE
+    cfg: "Config" = field(default=None, init=False, repr=False)
+    # sender: Optional["palabra_ai.task.sender.SenderSourceAudio"] = None  # noqa
+    q: asyncio.Queue[AudioFrame] = field(default_factory=asyncio.Queue)
+    # chunk_size: int = CHUNK_SIZE
     eof: TaskEvent = field(default_factory=TaskEvent, init=False)
 
     def __init__(self, *args, **kwargs):
@@ -37,6 +44,7 @@ class Writer(Task):
     """Abstract PCM audio writer process."""
 
     _: KW_ONLY
+    cfg: "Config" = field(default=None, init=False, repr=False)
     q: asyncio.Queue[AudioFrame] = field(default_factory=asyncio.Queue)
 
     async def _exit(self):
