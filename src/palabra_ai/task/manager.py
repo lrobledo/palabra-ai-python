@@ -18,18 +18,15 @@ from palabra_ai.constant import (
 )
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import SessionCredentials
+
 # from palabra_ai.internal.webrtc import AudioTrackSettings
-
 from palabra_ai.task.io.base import Io
-
 from palabra_ai.task.io.webrtc import WebrtcIo
 from palabra_ai.task.io.ws import WsIo
 from palabra_ai.task.logger import Logger
-
 from palabra_ai.task.stat import Stat
 from palabra_ai.task.transcription import Transcription
-from palabra_ai.util.logger import debug, warning
-from palabra_ai.util.logger import success
+from palabra_ai.util.logger import debug, success, warning
 
 
 @dataclass
@@ -43,7 +40,7 @@ class Manager(Task):
     writer: Writer = field(init=False)
     # track_settings: AudioTrackSettings = field(default_factory=AudioTrackSettings)
     # rt: Realtime = field(init=False)
-    io_class: type[Io]|None = field(default=None, init=False)
+    io_class: type[Io] | None = field(default=None, init=False)
     io: Io = field(init=False)
     # sender: SenderSourceAudio = field(init=False)
     # receiver: ReceiverTranslatedAudio = field(init=False)
@@ -94,11 +91,12 @@ class Manager(Task):
         # if hasattr(self.reader, "set_track_settings"):
         #     self.reader.set_track_settings(self.track_settings)
 
-
         if not self.io_class:
-            io_classes = {"webrtc": WebrtcIo, "ws": WsIo,
-                          # IoMode.WS: WsIo, IoMode.MIXED: MixedIo
-                          }
+            io_classes = {
+                "webrtc": WebrtcIo,
+                "ws": WsIo,
+                # IoMode.WS: WsIo, IoMode.MIXED: MixedIo
+            }
             self.io_class = io_classes.get(self.cfg.mode.name)
             if not self.io_class:
                 raise ConfigurationError(

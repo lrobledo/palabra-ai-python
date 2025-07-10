@@ -1,12 +1,10 @@
 import sys
-from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
-from pathlib import Path
 from dataclasses import dataclass, field
-from logging import DEBUG, INFO, WARNING
+
+# from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING
 from pathlib import Path
 
 from loguru import logger
-
 
 CRITICAL = 50
 FATAL = CRITICAL
@@ -17,6 +15,7 @@ SUCCESS = 25  # Custom level for successful operations
 INFO = 20
 DEBUG = 10
 NOTSET = 0
+
 
 @dataclass
 class Library:

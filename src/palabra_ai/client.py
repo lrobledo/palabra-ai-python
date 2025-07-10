@@ -14,9 +14,7 @@ from palabra_ai.debug.hang_coroutines import diagnose_hanging_tasks
 from palabra_ai.exc import ConfigurationError, unwrap_exceptions
 from palabra_ai.internal.rest import PalabraRESTClient
 from palabra_ai.task.manager import Manager
-from palabra_ai.util.logger import debug, error
-from palabra_ai.util.logger import success
-from palabra_ai.util.logger import warning
+from palabra_ai.util.logger import debug, error, success
 
 
 @dataclass
@@ -119,5 +117,5 @@ class PalabraAI:
                 raise excs[0] from eg
             raise excs_wo_cancel[0] from eg
         finally:
-            success("🎉🎉🎉 Translation completed 🎉🎉🎉")
+            # success("🎉🎉🎉 Translation completed 🎉🎉🎉")
             debug(diagnose_hanging_tasks())

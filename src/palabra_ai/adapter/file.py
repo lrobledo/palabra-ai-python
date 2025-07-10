@@ -5,15 +5,14 @@ from dataclasses import KW_ONLY, dataclass
 from pathlib import Path
 
 from palabra_ai.adapter._common import warn_if_cancel
-from palabra_ai.base.adapter import Reader, Writer
-from palabra_ai.constant import CHUNK_SIZE
-from palabra_ai.constant import SLEEP_INTERVAL_DEFAULT
+from palabra_ai.base.adapter import BufferedWriter, Reader
+from palabra_ai.constant import CHUNK_SIZE, SLEEP_INTERVAL_DEFAULT
 from palabra_ai.internal.audio import (
     convert_any_to_pcm16,
     read_from_disk,
     write_to_disk,
 )
-from palabra_ai.internal.buffer import AudioBufferWriter
+
 # from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.util.logger import debug, error, warning
 
@@ -27,7 +26,6 @@ class FileReader(Reader):
 
     _pcm_data: bytes | None = None
     _position: int = 0
-
 
     def __post_init__(self):
         self.path = Path(self.path)
@@ -79,7 +77,7 @@ class FileReader(Reader):
 
 
 @dataclass
-class FileWriter(Writer):
+class FileWriter(BufferedWriter):
     """Write PCM audio to file."""
 
     path: Path | str
@@ -89,36 +87,20 @@ class FileWriter(Writer):
     def __post_init__(self):
         self.path = Path(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._buffer_writer = AudioBufferWriter(self.sub_tg, queue=self.q)
-
-    async def boot(self):
-        await self._buffer_writer.start()
 
     async def do(self):
         debug(f"{self.name}.do() begin")
-        while not self.stopper and not self.eof:
+        while not self.stopper:
             await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
         debug(f"{self.name}.do() end")
 
-    async def exit(self) -> bytes:
+    async def _write_buffer(self):
+        """Write the buffered WAV data to file"""
         debug("Finalizing FileWriter...")
-
-        # Wait for the buffer writer task to complete (it will finish when EOF marker is processed)
-        if self._buffer_writer._task and not self._buffer_writer._task.done():
-            try:
-                debug("Waiting for AudioBufferWriter task to complete...")
-                await self._buffer_writer._task
-                debug("AudioBufferWriter task completed")
-            except asyncio.CancelledError:
-                debug("AudioBufferWriter task was cancelled")
-            except Exception as e:
-                debug(f"AudioBufferWriter task failed: {e}")
-
-        debug("All frames processed, generating WAV...")
 
         wav_data = b""
         try:
-            wav_data = await asyncio.to_thread(self._buffer_writer.to_wav_bytes)
+            wav_data = await asyncio.to_thread(self.to_wav_bytes)
             if wav_data:
                 debug(f"Generated {len(wav_data)} bytes of WAV data")
                 await warn_if_cancel(
@@ -130,21 +112,20 @@ class FileWriter(Writer):
                 warning("No WAV data generated")
         except asyncio.CancelledError:
             warning("FileWriter finalize cancelled during WAV processing")
+            if self.delete_on_error and self.path.exists():
+                self._cleanup_on_error()
             raise
         except Exception as e:
             error(f"Error converting to WAV: {e}", exc_info=True)
+            if self.delete_on_error and self.path.exists():
+                self._cleanup_on_error()
 
-        if self.delete_on_error and self.path.exists():
-            try:
-                self.path.unlink()
-                debug(f"Removed partial file {self.path}")
-            except asyncio.CancelledError:
-                warning("FileWriter cancel interrupted")
-                raise
-            except Exception as e:
-                error(f"Failed to remove partial file: {e}")
-        else:
-            debug(
-                f"Keeping partial file {self.path} (delete_on_error={self.delete_on_error})"
-            )
         return wav_data
+
+    def _cleanup_on_error(self):
+        """Clean up file on error if configured"""
+        try:
+            self.path.unlink()
+            debug(f"Removed partial file {self.path}")
+        except Exception as e:
+            error(f"Failed to remove partial file: {e}")

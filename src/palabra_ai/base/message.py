@@ -1,19 +1,16 @@
-import json
 import time
-from dataclasses import dataclass
-from dataclasses import field
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, ClassVar, Union
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar, Union
 
+import orjson
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from palabra_ai.base.enum import Channel
-from palabra_ai.base.enum import Direction
-
+from palabra_ai.base.enum import Channel, Direction
 from palabra_ai.exc import ApiError, ApiValidationError
 from palabra_ai.lang import Language
 from palabra_ai.util.logger import debug
+from palabra_ai.util.orjson import from_json
 
 if TYPE_CHECKING:
     from palabra_ai.config import Config
@@ -64,6 +61,7 @@ class Message(BaseModel):
         SET_TASK = "set_task"  # For set_task messages
         GET_TASK = "get_task"  # For get_task messages
         CURRENT_TASK = "current_task"  # For current_task messages
+        EOS = "eos"  # End of stream marker
         _QUEUE_LEVEL = "queue_level"
         _EMPTY = "empty"  # For empty {} messages
         _UNKNOWN = "unknown"  # For unrecognized message formats
@@ -107,6 +105,8 @@ class Message(BaseModel):
         "TranscriptionMessage",
         "UnknownMessage",
         "ErrorMessage",
+        "CurrentTaskMessage",
+        "EosMessage",
     ]:
         """Factory method to create appropriate message type using pattern matching"""
         data = known_raw.data
@@ -118,8 +118,8 @@ class Message(BaseModel):
                 and isinstance(data["data"], str)
             ):
                 try:
-                    data["data"] = json.loads(data["data"])
-                except json.JSONDecodeError:
+                    data["data"] = from_json(data["data"])
+                except orjson.JSONDecodeError:
                     debug("Failed to decode nested JSON in 'data' field")
 
             match data:
@@ -143,6 +143,9 @@ class Message(BaseModel):
 
                 case {"message_type": Message.Type.CURRENT_TASK.value, "data": _}:
                     return CurrentTaskMessage.create(known_raw)
+
+                case {"message_type": Message.Type.EOS.value, "data": _}:
+                    return EosMessage.create(known_raw)
 
                 # Queue status: non-empty dict without message_type
                 case dict() as d if d and "message_type" not in d and len(d) == 1:
@@ -183,13 +186,13 @@ class Message(BaseModel):
 
             case bytes() as b if b.startswith(b"{") and b.endswith(b"}"):
                 try:
-                    return KnownRaw(KnownRawType.json, json.loads(b.decode("utf-8")))
+                    return KnownRaw(KnownRawType.json, from_json(b))
                 except Exception as e:
                     return KnownRaw(KnownRawType.binary, b, e)
 
             case str() as s if s.startswith("{") and s.endswith("}"):
                 try:
-                    return KnownRaw(KnownRawType.json, json.loads(s))
+                    return KnownRaw(KnownRawType.json, from_json(s))
                 except Exception as e:
                     return KnownRaw(KnownRawType.string, s, e)
 
@@ -223,19 +226,36 @@ class EmptyMessage(Message):
 class EndTaskMessage(Message):
     ### {"message_type": "end_task", "data": {"force": True}}
     """End task message"""
+
     type_: Message.Type = Field(default=Message.Type.END_TASK, alias="message_type")
     force: bool = Field(default=False, description="Force end the task")
+    eos_timeout: int | None = Field(
+        default=5, description="Timeout for end of stream in seconds"
+    )
 
     def model_dump(self, **kwargs) -> dict[str, Any]:
         return {
             "message_type": self.type_.value,
-            "data": {"force": self.force},
+            "data": {"force": self.force, "eos_timeout": self.eos_timeout},
         }
+
+
+class EosMessage(Message):
+    """End of stream message"""
+
+    type_: Message.Type = Field(default=Message.Type.EOS, alias="message_type")
+
+    def model_dump(self, **kwargs) -> dict[str, Any]:
+        return {"message_type": self.type_.value, "data": {}}
+
 
 class SetTaskMessage(Message):
     """Set task message"""
+
     type_: Message.Type = Field(default=Message.Type.SET_TASK, alias="message_type")
-    data: dict[str, Any] = Field(default_factory=dict, description="Task configuration data")
+    data: dict[str, Any] = Field(
+        default_factory=dict, description="Task configuration data"
+    )
 
     @classmethod
     def from_config(cls, cfg: "Config"):
@@ -247,8 +267,10 @@ class SetTaskMessage(Message):
             "data": self.data,
         }
 
+
 class GetTaskMessage(Message):
     """Get task message"""
+
     type_: Message.Type = Field(default=Message.Type.GET_TASK, alias="message_type")
 
     def model_dump(self, **kwargs) -> dict[str, Any]:

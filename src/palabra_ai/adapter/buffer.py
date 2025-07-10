@@ -9,10 +9,9 @@ import subprocess
 import threading
 from dataclasses import KW_ONLY, dataclass
 
-from palabra_ai.base.adapter import Reader, Writer
+from palabra_ai.base.adapter import BufferedWriter, Reader
 from palabra_ai.constant import SLEEP_INTERVAL_DEFAULT
-from palabra_ai.internal.buffer import AudioBufferWriter
-from palabra_ai.util.logger import debug, error, warning
+from palabra_ai.util.logger import debug, warning
 
 
 @dataclass
@@ -58,65 +57,35 @@ class BufferReader(Reader):
 
 
 @dataclass
-class BufferWriter(Writer):
+class BufferWriter(BufferedWriter):
     """Write PCM audio to io.BytesIO buffer."""
 
-    buffer: io.BytesIO
+    buffer: io.BytesIO  # This is the output buffer, different from internal buffer
     _: KW_ONLY
 
     def __post_init__(self):
-        self._buffer_writer = AudioBufferWriter(self.sub_tg, queue=self.q)
-        self._started = False
-
-    async def boot(self):
-        await self._buffer_writer.start()
-        self._transfer_task = self.sub_tg.create_task(
-            self._transfer_audio(), name="Buffer:transfer"
-        )
+        # The parent BufferedWriter already has its own buffer for accumulating frames
+        self.output_buffer = self.buffer  # Store reference to output buffer
 
     async def do(self):
-        while not self.stopper and not self.eof:
+        while not self.stopper:
             await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
 
-    async def exit(self):
-        try:
-            await self._transfer_task
-        except asyncio.CancelledError:
-            pass
+    async def _write_buffer(self):
+        """Write the buffered WAV data to the output buffer"""
         debug("Finalizing BufferWriter...")
 
-        wav_data = await asyncio.to_thread(self._buffer_writer.to_wav_bytes)
+        wav_data = await asyncio.to_thread(self.to_wav_bytes)
         if wav_data:
-            self.buffer.seek(0)
-            self.buffer.truncate()
-            self.buffer.write(wav_data)
-            self.buffer.seek(0)
+            self.output_buffer.seek(0)
+            self.output_buffer.truncate()
+            self.output_buffer.write(wav_data)
+            self.output_buffer.seek(0)
             debug(f"Generated {len(wav_data)} bytes of WAV data in buffer")
         else:
             warning("No WAV data generated")
 
         return wav_data
-
-    async def _transfer_audio(self):
-        try:
-            while True:
-                try:
-                    audio_frame = await self._buffer_writer.queue.get()
-                    if audio_frame is None:
-                        +self.eof  # noqa
-                        return
-
-                    audio_bytes = audio_frame.data.tobytes()
-                    self.buffer.write(audio_bytes)
-
-                except asyncio.CancelledError:
-                    debug("BufferWriter transfer cancelled")
-                    raise
-                except Exception as e:
-                    error(f"Transfer error: {e}")
-        except asyncio.CancelledError:
-            debug("BufferWriter transfer loop cancelled")
-            raise
 
 
 class RunAsPipe:

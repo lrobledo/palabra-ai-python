@@ -10,12 +10,11 @@ from palabra_ai.adapter.device import (  # noqa: F401
 )
 from palabra_ai.adapter.dummy import DummyReader, DummyWriter  # noqa: F401
 from palabra_ai.adapter.file import FileReader, FileWriter  # noqa: F401
+from palabra_ai.base.enum import MessageType  # noqa: F401
+from palabra_ai.base.message import Message, TranscriptionMessage  # noqa: F401
 from palabra_ai.client import PalabraAI  # noqa: F401
 from palabra_ai.config import Config, SourceLang, TargetLang  # noqa: F401
-from palabra_ai.base.message import TranscriptionMessage, Message # noqa: F401
-from palabra_ai.base.enum import MessageType # noqa: F401
 from palabra_ai.lang import (
-    Language,
     AR,
     AR_AE,
     AR_SA,
@@ -59,6 +58,7 @@ from palabra_ai.lang import (
     UK,
     VN,
     ZH,
+    Language,
 )  # noqa: F401
 
 __version__ = "0.2.3"

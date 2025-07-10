@@ -6,16 +6,21 @@ import numpy as np
 from livekit.rtc import AudioFrame as RtcAudioFrame
 
 from palabra_ai.util.logger import error
-from palabra_ai.util.orjson import from_json
-from palabra_ai.util.orjson import to_json
+from palabra_ai.util.orjson import from_json, to_json
 
 
 class AudioFrame:
     """Lightweight AudioFrame replacement with __slots__ for performance"""
-    __slots__ = ('data', 'sample_rate', 'num_channels', 'samples_per_channel')
 
-    def __init__(self, data: np.ndarray | bytes, sample_rate: int = 48000,
-                 num_channels: int = 1, samples_per_channel: int | None = None):
+    __slots__ = ("data", "sample_rate", "num_channels", "samples_per_channel")
+
+    def __init__(
+        self,
+        data: np.ndarray | bytes,
+        sample_rate: int = 48000,
+        num_channels: int = 1,
+        samples_per_channel: int | None = None,
+    ):
         if isinstance(data, bytes):
             # Convert bytes to numpy array
             self.data = np.frombuffer(data, dtype=np.int16)
@@ -31,7 +36,9 @@ class AudioFrame:
             self.samples_per_channel = samples_per_channel
 
     @classmethod
-    def create(cls, sample_rate: int, num_channels: int, samples_per_channel: int) -> "AudioFrame":
+    def create(
+        cls, sample_rate: int, num_channels: int, samples_per_channel: int
+    ) -> "AudioFrame":
         """
         Create a new empty AudioFrame instance with specified sample rate, number of channels,
         and samples per channel.
@@ -58,11 +65,13 @@ class AudioFrame:
             data=frame.data,
             sample_rate=frame.sample_rate,
             num_channels=frame.num_channels,
-            samples_per_channel=frame.samples_per_channel
+            samples_per_channel=frame.samples_per_channel,
         )
 
     @classmethod
-    def from_ws(cls, raw_msg: bytes|str, sample_rate: int = 24000, num_channels: int = 1) -> Optional["AudioFrame"]:
+    def from_ws(
+        cls, raw_msg: bytes | str, sample_rate: int = 24000, num_channels: int = 1
+    ) -> Optional["AudioFrame"]:
         """Create AudioFrame from WebSocket message
 
         Expected format:
@@ -74,11 +83,11 @@ class AudioFrame:
         }
         """
 
-        if not isinstance(raw_msg, (bytes, str)):
+        if not isinstance(raw_msg, bytes | str):
             return None
         elif isinstance(raw_msg, str) and "output_audio_data" not in raw_msg:
             return None
-        elif isinstance(raw_msg, bytes) and not  b"output_audio_data" not in raw_msg:
+        elif isinstance(raw_msg, bytes) and not b"output_audio_data" not in raw_msg:
             return None
 
         msg = from_json(raw_msg)
@@ -92,7 +101,7 @@ class AudioFrame:
             # If data is a string, decode it
             msg["data"] = from_json(msg["data"])
 
-        if not "data" in msg["data"]:
+        if "data" not in msg["data"]:
             return None
 
         # Extract base64 data
@@ -103,9 +112,7 @@ class AudioFrame:
             audio_bytes = base64.b64decode(base64_data)
 
             return cls(
-                data=audio_bytes,
-                sample_rate=sample_rate,
-                num_channels=num_channels
+                data=audio_bytes, sample_rate=sample_rate, num_channels=num_channels
             )
         except Exception as e:
             error(f"Failed to decode audio data: {e}")
@@ -115,7 +122,7 @@ class AudioFrame:
             data=self.data,
             sample_rate=self.sample_rate,
             num_channels=self.num_channels,
-            samples_per_channel=self.samples_per_channel
+            samples_per_channel=self.samples_per_channel,
         )
 
     def to_ws(self) -> bytes:
@@ -130,9 +137,9 @@ class AudioFrame:
         }
         """
 
-        return to_json({
-            "message_type": "input_audio_data",
-            "data": {
-                "data": base64.b64encode(self.data)
+        return to_json(
+            {
+                "message_type": "input_audio_data",
+                "data": {"data": base64.b64encode(self.data)},
             }
-        })
+        )

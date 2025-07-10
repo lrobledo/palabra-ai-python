@@ -23,19 +23,21 @@ class SessionCredentials(BaseModel):
     @property
     def jwt_token(self) -> str:
         if not len(self.publisher) > 0:
-            raise ConfigurationError(f"Publisher token is missing or invalid, got: {self.publisher}")
+            raise ConfigurationError(
+                f"Publisher token is missing or invalid, got: {self.publisher}"
+            )
         return self.publisher[0]
 
     @property
     def ws_url(self) -> str:
         if not self.control_url:
-            raise ConfigurationError(f"Control (ws) URL is missing")
+            raise ConfigurationError("Control (ws) URL is missing")
         return self.control_url
 
     @property
     def webrtc_url(self) -> str:
         if not self.stream_url:
-            raise ConfigurationError(f"Stream URL is missing")
+            raise ConfigurationError("Stream URL is missing")
         return self.stream_url
 
 

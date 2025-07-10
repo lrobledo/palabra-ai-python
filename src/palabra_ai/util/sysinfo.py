@@ -24,6 +24,7 @@ except ImportError:
 
 try:
     import psutil
+
     HAS_PSUTIL = True
 except ImportError:
     HAS_PSUTIL = False
@@ -33,11 +34,7 @@ def _run_command(cmd: list[str], timeout: int = 5) -> str | None:
     """Run a command and return its output, or None if it fails."""
     try:
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False
+            cmd, capture_output=True, text=True, timeout=timeout, check=False
         )
         if result.returncode == 0:
             return result.stdout.strip()
@@ -236,6 +233,7 @@ class SystemInfo:
             try:
                 # Alternative: use pkg_resources if available (though deprecated)
                 import pkg_resources
+
                 for dist in pkg_resources.working_set:
                     self.installed_packages[dist.key] = dist.version
             except Exception:
@@ -271,12 +269,12 @@ class SystemInfo:
                     "free": stat.free,
                     "percent": (stat.used / stat.total * 100) if stat.total > 0 else 0,
                 }
-            
+
             # Add df -h output
             df_output = _run_command(["df", "-h"])
             if df_output:
                 self.disk_space["df_output"] = df_output
-                
+
         except Exception:
             pass
 
@@ -293,7 +291,7 @@ class SystemInfo:
                     "used": vm.used,
                     "free": vm.free,
                 }
-                
+
                 # Swap memory
                 swap = psutil.swap_memory()
                 self.memory_info["swap"] = {
@@ -305,25 +303,26 @@ class SystemInfo:
             else:
                 # Fallback to resource module for basic info
                 import resource
+
                 rusage = resource.getrusage(resource.RUSAGE_SELF)
                 self.memory_info["rusage"] = {
                     "maxrss": rusage.ru_maxrss,  # Maximum resident set size
-                    "ixrss": rusage.ru_ixrss,    # Integral shared memory size
-                    "idrss": rusage.ru_idrss,    # Integral unshared data size
-                    "isrss": rusage.ru_isrss,    # Integral unshared stack size
+                    "ixrss": rusage.ru_ixrss,  # Integral shared memory size
+                    "idrss": rusage.ru_idrss,  # Integral unshared data size
+                    "isrss": rusage.ru_isrss,  # Integral unshared stack size
                 }
-            
+
             # Add system command outputs
             # Try free command (Linux)
             free_output = _run_command(["free", "-h"])
             if free_output:
                 self.memory_info["free_output"] = free_output
-            
+
             # Try vm_stat command (macOS)
             vm_stat_output = _run_command(["vm_stat"])
             if vm_stat_output:
                 self.memory_info["vm_stat_output"] = vm_stat_output
-                
+
             # Try top command for memory summary
             if sys.platform == "darwin":
                 # macOS version
@@ -331,14 +330,23 @@ class SystemInfo:
             else:
                 # Linux version
                 top_output = _run_command(["top", "-b", "-n", "1"])
-            
+
             if top_output:
                 # Extract just the memory lines
-                lines = top_output.split('\n')
-                memory_lines = [line for line in lines if any(keyword in line.lower() for keyword in ['mem', 'swap', 'physicalmem'])]
+                lines = top_output.split("\n")
+                memory_lines = [
+                    line
+                    for line in lines
+                    if any(
+                        keyword in line.lower()
+                        for keyword in ["mem", "swap", "physicalmem"]
+                    )
+                ]
                 if memory_lines:
-                    self.memory_info["top_memory_summary"] = '\n'.join(memory_lines[:5])  # Limit to first 5 relevant lines
-                    
+                    self.memory_info["top_memory_summary"] = "\n".join(
+                        memory_lines[:5]
+                    )  # Limit to first 5 relevant lines
+
         except Exception:
             pass
 
@@ -347,17 +355,17 @@ class SystemInfo:
         try:
             if HAS_PSUTIL:
                 process = psutil.Process(os.getpid())
-                
+
                 # Memory info
                 mem_info = process.memory_info()
                 self.process_memory["memory"] = {
                     "rss": mem_info.rss,  # Resident Set Size
                     "vms": mem_info.vms,  # Virtual Memory Size
                 }
-                
+
                 # Memory percent
                 self.process_memory["memory_percent"] = process.memory_percent()
-                
+
                 # Full memory info if available
                 if hasattr(process, "memory_full_info"):
                     full_info = process.memory_full_info()
@@ -369,19 +377,22 @@ class SystemInfo:
             else:
                 # Fallback to resource module
                 import resource
+
                 rusage = resource.getrusage(resource.RUSAGE_SELF)
                 # Convert to bytes (on Darwin/macOS it's in KB)
                 multiplier = 1024 if sys.platform == "darwin" else 1
                 self.process_memory["maxrss"] = rusage.ru_maxrss * multiplier
-            
+
             # Add ps output for current process
             pid = os.getpid()
-            
+
             # ps with memory info
-            ps_output = _run_command(["ps", "-p", str(pid), "-o", "pid,vsz,rss,pmem,comm"])
+            ps_output = _run_command(
+                ["ps", "-p", str(pid), "-o", "pid,vsz,rss,pmem,comm"]
+            )
             if ps_output:
                 self.process_memory["ps_output"] = ps_output
-                
+
             # More detailed ps output (platform-specific)
             if sys.platform == "darwin":
                 # macOS extended format
@@ -389,10 +400,10 @@ class SystemInfo:
             else:
                 # Linux extended format
                 ps_extended = _run_command(["ps", "-p", str(pid), "-u"])
-                
+
             if ps_extended:
                 self.process_memory["ps_extended"] = ps_extended
-                
+
         except Exception:
             pass
 
@@ -401,29 +412,31 @@ class SystemInfo:
         try:
             # GC stats
             self.gc_info["stats"] = gc.get_stats()
-            
+
             # GC counts for each generation
             self.gc_info["count"] = gc.get_count()
-            
+
             # GC thresholds
             self.gc_info["threshold"] = gc.get_threshold()
-            
+
             # Is GC enabled?
             self.gc_info["enabled"] = gc.isenabled()
-            
+
             # Number of objects
             self.gc_info["objects"] = len(gc.get_objects())
-            
+
             # Referrers count for common types
             type_counts = {}
             for obj in gc.get_objects():
                 type_name = type(obj).__name__
                 type_counts[type_name] = type_counts.get(type_name, 0) + 1
-            
+
             # Get top 10 most common types
-            sorted_types = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            sorted_types = sorted(
+                type_counts.items(), key=lambda x: x[1], reverse=True
+            )[:10]
             self.gc_info["top_object_types"] = dict(sorted_types)
-            
+
         except Exception:
             pass
 

@@ -41,7 +41,6 @@ from palabra_ai.constant import (
 )
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.lang import Language
-
 from palabra_ai.types import T_ON_TRANSCRIPTION
 from palabra_ai.util.logger import set_logging
 from palabra_ai.util.orjson import from_json, to_json
@@ -96,15 +95,16 @@ class WebRtcMode(IoMode):
                 "content_type": "audio",
                 "source": {
                     "type": "webrtc",
-                }
+                },
             },
             "output_stream": {
                 "content_type": "audio",
                 "target": {
                     "type": "webrtc",
-                }
-            }
+                },
+            },
         }
+
 
 class WsMode(IoMode):
     name: str = "ws"
@@ -121,17 +121,13 @@ class WsMode(IoMode):
                     "format": "pcm_s16le",
                     "sample_rate": self.sample_rate,
                     "channels": self.num_channels,
-                }
+                },
             },
             "output_stream": {
                 "content_type": "audio",
-                "target": {
-                    "type": "ws",
-                    "format": "pcm_s16le"
-                }
-            }
+                "target": {"type": "ws", "format": "pcm_s16le"},
+            },
         }
-
 
 
 class Stream(BaseModel):

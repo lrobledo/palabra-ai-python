@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from dataclasses import asdict
-from dataclasses import KW_ONLY, dataclass, field
+from dataclasses import KW_ONLY, asdict, dataclass, field
 
 import palabra_ai
 from palabra_ai.base.message import Dbg
@@ -17,6 +16,7 @@ from palabra_ai.constant import (
     SLEEP_INTERVAL_DEFAULT,
 )
 from palabra_ai.task.io.base import Io
+
 # from palabra_ai.task.realtime import Realtime
 from palabra_ai.util.fanout_queue import Subscription
 from palabra_ai.util.logger import debug

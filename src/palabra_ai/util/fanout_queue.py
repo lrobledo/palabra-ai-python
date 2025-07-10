@@ -1,18 +1,23 @@
 import asyncio
-import uuid
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, NamedTuple, Optional, AsyncIterator, AsyncGenerator, TypeVar, Generic
+from typing import (
+    Any,
+    Generic,
+    NamedTuple,
+    TypeVar,
+)
 
 from palabra_ai.base.task_event import TaskEvent
 from palabra_ai.util.logger import debug
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class Subscription(NamedTuple):
     id_: str
-    q: asyncio.Queue[Optional[T]]
-    foq: 'FanoutQueue[T]' = None
+    q: asyncio.Queue[T | None]
+    foq: "FanoutQueue[T]" = None
 
 
 class FanoutQueue(Generic[T]):
@@ -25,11 +30,13 @@ class FanoutQueue(Generic[T]):
             return subscriber
         elif isinstance(subscriber, object):
             # Use the object's id if it's not a string
-            if name := getattr(subscriber, 'name', None):
+            if name := getattr(subscriber, "name", None):
                 return f"{name}_{id(subscriber)}"
             return f"{type(subscriber)}_{id(subscriber)}"
         else:
-            raise TypeError(f"Subscriber must be a string or an object, got: {type(subscriber)}")
+            raise TypeError(
+                f"Subscriber must be a string or an object, got: {type(subscriber)}"
+            )
 
     def is_subscribed(self, subscriber: Any) -> bool:
         """Check if subscriber is currently subscribed"""
@@ -43,9 +50,7 @@ class FanoutQueue(Generic[T]):
         if subscriber_id in self.subscribers:
             raise ValueError(f"Subscriber {subscriber} is already subscribed")
         subscription = Subscription(
-            id_=subscriber_id,
-            q=asyncio.Queue(maxsize),
-            foq=self
+            id_=subscriber_id, q=asyncio.Queue(maxsize), foq=self
         )
         self.subscribers[subscriber_id] = subscription
         return subscription
@@ -59,7 +64,7 @@ class FanoutQueue(Generic[T]):
         # Always send None to signal termination
         subscription.q.put_nowait(None)
 
-    def publish(self, message: Optional[T]) -> None:
+    def publish(self, message: T | None) -> None:
         """Publish message to all subscribers. Can be None."""
         if self._closed:
             raise RuntimeError("FanoutQueue is closed")
@@ -86,8 +91,9 @@ class FanoutQueue(Generic[T]):
         debug(f"Closed FanoutQueue, unsubscribed {len(subscriber_ids)} subscribers")
 
     @asynccontextmanager
-    async def receiver(self, subscriber: Any, stopper: TaskEvent, timeout: Optional[float] = None) -> AsyncIterator[
-        AsyncGenerator[T, None]]:
+    async def receiver(
+        self, subscriber: Any, stopper: TaskEvent, timeout: float | None = None
+    ) -> AsyncIterator[AsyncGenerator[T, None]]:
         """Context manager for subscribing and receiving messages
 
         Args:
@@ -97,15 +103,16 @@ class FanoutQueue(Generic[T]):
         """
         subscriber_id = self._get_id(subscriber)
 
-        async def message_generator(subscription: Subscription) -> AsyncGenerator[T, None]:
+        async def message_generator(
+            subscription: Subscription,
+        ) -> AsyncGenerator[T, None]:
             """Inner generator for messages"""
             while not stopper:
                 try:
                     if timeout is not None:
                         # Use timeout to prevent hanging
-                        msg: Optional[T] = await asyncio.wait_for(
-                            subscription.q.get(),
-                            timeout=timeout
+                        msg: T | None = await asyncio.wait_for(
+                            subscription.q.get(), timeout=timeout
                         )
                     else:
                         msg = await subscription.q.get()
@@ -116,17 +123,19 @@ class FanoutQueue(Generic[T]):
 
                     yield msg
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Timeout reached, check if we should continue
                     if self._closed or not self.is_subscribed(subscriber_id) or stopper:
-                        debug(f"Subscriber {subscriber_id} stopping due to timeout and closed/unsubscribed state")
+                        debug(
+                            f"Subscriber {subscriber_id} stopping due to timeout and closed/unsubscribed state"
+                        )
                         break
                     # Otherwise continue waiting
 
         debug(f"Starting subscriber {subscriber_id}")
 
         # Subscribe
-        q = self.subscribe(subscriber_id, maxsize=0)
+        _ = self.subscribe(subscriber_id, maxsize=0)
         subscription = self.subscribers[subscriber_id]
         generator = message_generator(subscription)
 
@@ -143,4 +152,3 @@ class FanoutQueue(Generic[T]):
             await generator.aclose()
 
             debug(f"Cleanup done for subscriber {subscriber_id}")
-
