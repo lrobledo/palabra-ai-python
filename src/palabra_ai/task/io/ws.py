@@ -1,14 +1,23 @@
+import asyncio
+import json
+from asyncio import get_running_loop
+from asyncio import sleep
 from dataclasses import dataclass
 from dataclasses import field
 from dataclasses import KW_ONLY
+from functools import cached_property
 from typing import Optional
 
+import numpy as np
+
+from palabra_ai.base.audio import AudioFrame
 from palabra_ai.base.enum import Channel
 from palabra_ai.base.enum import Direction
 from palabra_ai.base.message import Dbg
 from palabra_ai.task.io.base import Io
 from websockets.asyncio.client import connect as ws_connect, ClientConnection
 
+from palabra_ai.util.logger import debug
 from palabra_ai.util.orjson import to_json
 
 
@@ -17,6 +26,11 @@ class WsIo(Io):
     _: KW_ONLY
     ws: Optional[ClientConnection] = field(default=None, init=False)
     _ws_cm: Optional[object] = field(default=None, init=False)
+    reader_chunk_size: int = field(default=None, init=False)
+
+    def __post_init__(self):
+        self.reader_chunk_size = int(self.cfg.mode.sample_rate * (self.cfg.mode.chunk_duration_ms / 1000) * 2)
+
 
     @property
     def dsn(self) -> str:
@@ -36,7 +50,9 @@ class WsIo(Io):
                 if msg is None or self.stopper:
                     self.dbg("stopping in_msg_sender due to None or stopper")
                     return
-                await self.ws.send(to_json(msg))
+                raw = to_json(msg)
+                self.dbg(f"<- {raw[0:30]}")
+                await self.ws.send(raw)
 
     async def ws_receiver(self):
         from palabra_ai.base.message import Message
@@ -44,11 +60,15 @@ class WsIo(Io):
             if self.stopper or raw_msg is None:
                 self.dbg("Stopping ws_receiver due to stopper or None message")
                 return
-            self.dbg(f"Received raw message: {raw_msg[:1000]}")
-
-            msg = Message.decode(raw_msg)
-            msg._dbg = Dbg(Channel.WS, Direction.OUT)
-            self.out_msg_foq.publish(msg)
+            self.dbg(f"-> {raw_msg[:30]}")
+            audio_frame = AudioFrame.from_ws(raw_msg)
+            if audio_frame is not None:
+                self.dbg(f"Received audio frame: {audio_frame!r}")
+                self.reader.q.put_nowait(audio_frame)
+            else:
+                msg = Message.decode(raw_msg)
+                msg._dbg = Dbg(Channel.WS, Direction.OUT)
+                self.out_msg_foq.publish(msg)
 
 
     async def boot(self):
@@ -62,18 +82,61 @@ class WsIo(Io):
         self.sub_tg.create_task(self.ws_receiver(), name="WsIo:receiver")
         self.sub_tg.create_task(self.in_msg_sender(), name=f"WsIo:in_msg_sender")
         await self.set_task()
-        breakpoint()
+
 
     async def do(self):
-        """Main work loop with already connected WebSocket"""
+        await self.reader.ready
+        while not self.stopper and not self.eof:
+            chunk = await self.reader.read(self.reader_chunk_size)
 
-        out_task = self.tg.create_task(self.out_task(), name="Ws:out")
-        in_task = self.tg.create_task(self.in_task(), name="Ws:in")
+            if chunk is None:
+                self.dbg(f"T{self.name}: Audio EOF reached")
+                +self.eof  # noqa
+                break
 
-        await asyncio.gather(out_task, in_task)
+            if not chunk:
+                continue
+
+            # self.bytes_sent += len(chunk)
+            await self.push(chunk)
+            await sleep(self.cfg.mode.chunk_duration_ms / 1000)
 
     async def exit(self):
         """Clean up WebSocket connection"""
         if self._ws_cm and self.ws:
             await self._ws_cm.__aexit__(None, None, None)
         self.ws = None
+
+    async def push(self, audio_bytes: bytes) -> None:
+        samples_per_channel = self.chunk_size
+        total_samples = len(audio_bytes) // 2
+        audio_frame = self.new_frame()
+        audio_data = np.frombuffer(audio_frame.data, dtype=np.int16)
+
+        for i in range(0, total_samples, samples_per_channel):
+            if get_running_loop().is_closed():
+                break
+            frame_chunk = audio_bytes[i * 2 : (i + samples_per_channel) * 2]
+
+            if len(frame_chunk) < samples_per_channel * 2:
+                padded_chunk = np.zeros(samples_per_channel, dtype=np.int16)
+                frame_chunk = np.frombuffer(frame_chunk, dtype=np.int16)
+                padded_chunk[: len(frame_chunk)] = frame_chunk
+            else:
+                padded_chunk = np.frombuffer(frame_chunk, dtype=np.int16)
+
+            np.copyto(audio_data, padded_chunk)
+            self.dbg(f"Sending audio frame: {audio_frame!r}")
+            raw = audio_frame.to_ws()
+            self.dbg(f"<- {raw[0:30]}")
+            await self.ws.send(raw)
+
+
+    @cached_property
+    def chunk_size(self) -> int:
+        return int(self.cfg.mode.sample_rate * (self.cfg.mode.chunk_duration_ms / 1000))
+
+    def new_frame(self) -> AudioFrame:
+        return AudioFrame.create(
+            self.cfg.mode.sample_rate, self.cfg.mode.num_channels, self.chunk_size
+        )

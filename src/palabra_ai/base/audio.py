@@ -1,8 +1,13 @@
 import base64
 import ctypes
+from typing import Optional
 
 import numpy as np
 from livekit.rtc import AudioFrame as RtcAudioFrame
+
+from palabra_ai.util.logger import error
+from palabra_ai.util.orjson import from_json
+from palabra_ai.util.orjson import to_json
 
 
 class AudioFrame:
@@ -57,7 +62,7 @@ class AudioFrame:
         )
 
     @classmethod
-    def from_ws(cls, raw_msg: dict, sample_rate: int = 24000, num_channels: int = 1) -> "AudioFrame":
+    def from_ws(cls, raw_msg: bytes|str, sample_rate: int = 24000, num_channels: int = 1) -> Optional["AudioFrame"]:
         """Create AudioFrame from WebSocket message
 
         Expected format:
@@ -68,17 +73,42 @@ class AudioFrame:
             }
         }
         """
+
+        if not isinstance(raw_msg, (bytes, str)):
+            return None
+        elif isinstance(raw_msg, str) and "output_audio_data" not in raw_msg:
+            return None
+        elif isinstance(raw_msg, bytes) and not  b"output_audio_data" not in raw_msg:
+            return None
+
+        msg = from_json(raw_msg)
+        if msg.get("message_type") != "output_audio_data":
+            return None
+
+        if "data" not in msg:
+            return None
+
+        if isinstance(msg["data"], str):
+            # If data is a string, decode it
+            msg["data"] = from_json(msg["data"])
+
+        if not "data" in msg["data"]:
+            return None
+
         # Extract base64 data
-        base64_data = raw_msg["data"]["data"]
+        base64_data = msg["data"]["data"]
 
-        # Decode base64 to bytes
-        audio_bytes = base64.b64decode(base64_data)
+        try:
+            # Decode base64 to bytes
+            audio_bytes = base64.b64decode(base64_data)
 
-        return cls(
-            data=audio_bytes,
-            sample_rate=sample_rate,
-            num_channels=num_channels
-        )
+            return cls(
+                data=audio_bytes,
+                sample_rate=sample_rate,
+                num_channels=num_channels
+            )
+        except Exception as e:
+            error(f"Failed to decode audio data: {e}")
 
     def to_rtc(self) -> RtcAudioFrame:
         return RtcAudioFrame(
@@ -88,7 +118,7 @@ class AudioFrame:
             samples_per_channel=self.samples_per_channel
         )
 
-    def to_ws(self) -> dict:
+    def to_ws(self) -> bytes:
         """Convert AudioFrame to WebSocket message format
 
         Returns:
@@ -99,15 +129,10 @@ class AudioFrame:
             }
         }
         """
-        # Convert numpy array to bytes
-        audio_bytes = self.data.tobytes()
 
-        # Encode to base64
-        base64_data = base64.b64encode(audio_bytes).decode("utf-8")
-
-        return {
+        return to_json({
             "message_type": "input_audio_data",
             "data": {
-                "data": base64_data
+                "data": base64.b64encode(self.data)
             }
-        }
+        })
