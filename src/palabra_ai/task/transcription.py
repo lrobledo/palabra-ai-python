@@ -4,10 +4,10 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import KW_ONLY, dataclass, field
 
-from palabra_ai.base.message import Message, TranscriptionMessage
-from palabra_ai.base.task import Task
 from palabra_ai.config import Config
 from palabra_ai.constant import SLEEP_INTERVAL_DEFAULT
+from palabra_ai.message import Message, TranscriptionMessage
+from palabra_ai.task.base import Task
 from palabra_ai.task.io.base import Io
 
 # from palabra_ai.task.realtime import Realtime

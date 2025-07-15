@@ -7,15 +7,15 @@ from typing import TYPE_CHECKING
 
 from livekit import rtc
 
-from palabra_ai.base.audio import AudioFrame
-from palabra_ai.base.enum import Channel, Direction
-from palabra_ai.base.message import (
+from palabra_ai.audio import AudioFrame
+from palabra_ai.constant import (
+    SLEEP_INTERVAL_SHORT,
+)
+from palabra_ai.enum import Channel, Direction
+from palabra_ai.message import (
     Dbg,
     EosMessage,
     Message,
-)
-from palabra_ai.constant import (
-    SLEEP_INTERVAL_SHORT,
 )
 from palabra_ai.task.io.base import Io
 from palabra_ai.util.aio import shutdown

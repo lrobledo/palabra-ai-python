@@ -5,8 +5,6 @@ import time
 from dataclasses import KW_ONLY, asdict, dataclass, field
 
 import palabra_ai
-from palabra_ai.base.message import Dbg
-from palabra_ai.base.task import Task
 from palabra_ai.config import (
     Config,
 )
@@ -15,6 +13,8 @@ from palabra_ai.constant import (
     SHUTDOWN_TIMEOUT,
     SLEEP_INTERVAL_DEFAULT,
 )
+from palabra_ai.message import Dbg
+from palabra_ai.task.base import Task
 from palabra_ai.task.io.base import Io
 
 # from palabra_ai.task.realtime import Realtime

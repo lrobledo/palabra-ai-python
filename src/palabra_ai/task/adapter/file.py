@@ -4,14 +4,13 @@ import asyncio
 from dataclasses import KW_ONLY, dataclass
 from pathlib import Path
 
-from palabra_ai.adapter._common import warn_if_cancel
-from palabra_ai.base.adapter import BufferedWriter, Reader
-from palabra_ai.constant import CHUNK_SIZE, SLEEP_INTERVAL_DEFAULT
 from palabra_ai.internal.audio import (
     convert_any_to_pcm16,
     read_from_disk,
     write_to_disk,
 )
+from palabra_ai.task.adapter.base import BufferedWriter, Reader
+from palabra_ai.util.aio import warn_if_cancel
 
 # from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.util.logger import debug, error, warning
@@ -51,10 +50,6 @@ class FileReader(Reader):
             error(f"Failed to convert audio: {e}")
             raise
 
-    async def do(self):
-        while not self.stopper and not self.eof:
-            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
-
     async def exit(self):
         debug(f"{self.name} exiting, position: {self._position}, eof: {self.eof}")
         if not self.eof:
@@ -62,7 +57,7 @@ class FileReader(Reader):
         else:
             debug(f"{self.name} reached EOF at position {self._position}")
 
-    async def read(self, size: int = CHUNK_SIZE) -> bytes | None:
+    async def read(self, size: int) -> bytes | None:
         await self.ready
 
         if self._position >= len(self._pcm_data):
@@ -81,26 +76,20 @@ class FileWriter(BufferedWriter):
     """Write PCM audio to file."""
 
     path: Path | str
-    delete_on_error: bool = False
     _: KW_ONLY
+    delete_on_error: bool = False
 
     def __post_init__(self):
         self.path = Path(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    async def do(self):
-        debug(f"{self.name}.do() begin")
-        while not self.stopper:
-            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
-        debug(f"{self.name}.do() end")
-
-    async def _write_buffer(self):
+    async def exit(self):
         """Write the buffered WAV data to file"""
         debug("Finalizing FileWriter...")
 
         wav_data = b""
         try:
-            wav_data = await asyncio.to_thread(self.to_wav_bytes)
+            wav_data = await asyncio.to_thread(self.ab.to_wav_bytes)
             if wav_data:
                 debug(f"Generated {len(wav_data)} bytes of WAV data")
                 await warn_if_cancel(
@@ -112,20 +101,19 @@ class FileWriter(BufferedWriter):
                 warning("No WAV data generated")
         except asyncio.CancelledError:
             warning("FileWriter finalize cancelled during WAV processing")
-            if self.delete_on_error and self.path.exists():
-                self._cleanup_on_error()
+            self._delete_on_error()
             raise
         except Exception as e:
             error(f"Error converting to WAV: {e}", exc_info=True)
-            if self.delete_on_error and self.path.exists():
-                self._cleanup_on_error()
+            self._delete_on_error()
+            raise
 
         return wav_data
 
-    def _cleanup_on_error(self):
-        """Clean up file on error if configured"""
-        try:
-            self.path.unlink()
-            debug(f"Removed partial file {self.path}")
-        except Exception as e:
-            error(f"Failed to remove partial file: {e}")
+    def _delete_on_error(self):
+        if self.delete_on_error and self.path.exists():
+            try:
+                self.path.unlink()
+            except Exception as clear_e:
+                error(f"Failed to remove file on error: {clear_e}")
+                raise

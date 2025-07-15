@@ -188,7 +188,7 @@ MINIMAL_SETTINGS = {
     },
     "output_stream": {
         "content_type": "audio",
-        "target": {"type": "ws", "format": "pcm_s16le"},
+        "target": {"type": "ws", "format": "pcm_s16le", "sample_rate": 24000, "channels": 1},
     },
     "pipeline": {
         "preprocessing": {},

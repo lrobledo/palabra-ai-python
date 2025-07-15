@@ -3,9 +3,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import KW_ONLY, dataclass, field
 
-from palabra_ai.adapter.dummy import DummyWriter
-from palabra_ai.base.adapter import Reader, Writer
-from palabra_ai.base.task import Task
 from palabra_ai.config import (
     Config,
 )
@@ -18,6 +15,9 @@ from palabra_ai.constant import (
 )
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.internal.rest import SessionCredentials
+from palabra_ai.task.adapter.base import Reader, Writer
+from palabra_ai.task.adapter.dummy import DummyWriter
+from palabra_ai.task.base import Task
 
 # from palabra_ai.internal.webrtc import AudioTrackSettings
 from palabra_ai.task.io.base import Io
@@ -56,35 +56,37 @@ class Manager(Task):
     _show_banner_loop: asyncio.Task | None = field(default=None, init=False)
 
     def __post_init__(self):
-        self.stat = Stat(self)
+        self.stat = Stat(manager=self, cfg=self.cfg)
 
         if len(self.cfg.targets) != SINGLE_TARGET_SUPPORTED_COUNT:
             raise ConfigurationError(
                 f"Only single target language supported, got {len(self.cfg.targets)}"
             )
 
-        self.reader = reader = self.cfg.source.reader
+        self.reader = self.cfg.source.reader
         target = self.cfg.targets[0]
-        self.writer = writer = target.writer
+        self.writer = target.writer
 
-        if not isinstance(reader, Reader):
+        if not isinstance(self.reader, Reader):
             raise ConfigurationError(
-                f"cfg.source.reader should be an instance of Reader, got {type(reader)}"
+                f"cfg.source.reader should be an instance of Reader, got {type(self.reader)}"
             )
 
-        if not any([isinstance(writer, Writer), callable(target.on_transcription)]):
+        if not any(
+            [isinstance(self.writer, Writer), callable(target.on_transcription)]
+        ):
             raise ConfigurationError(
                 f"You should use at least [writer] or [on_transcription] for TargetLang: "
                 f"{self.cfg.targets[0]}, got neither or mistyped them, "
-                f"writer={type(writer)}, on_transcription={type(target.on_transcription)}"
+                f"writer={type(self.writer)}, on_transcription={type(target.on_transcription)}"
             )
 
         if not self.writer:
             debug(f"🔧 {self.name} using DummyWriter for target {target.lang}")
             self.writer = DummyWriter()
 
-        reader.cfg = self.cfg
-        writer.cfg = self.cfg
+        self.reader.cfg = self.cfg
+        self.writer.cfg = self.cfg
 
         # if hasattr(self.writer, "set_track_settings"):
         #     self.writer.set_track_settings(self.track_settings)
@@ -103,7 +105,12 @@ class Manager(Task):
                     f"Unsupported IO mode: {self.cfg.mode.name}, "
                     f"supported modes are: {io_classes}"
                 )
-        self.io = self.io_class(self.cfg, self.credentials, self.reader, self.writer)
+        self.io = self.io_class(
+            cfg=self.cfg,
+            credentials=self.credentials,
+            reader=self.reader,
+            writer=self.writer,
+        )
 
         # self.rt = Realtime(self.cfg, self.io)
         # if self.cfg.log_file:

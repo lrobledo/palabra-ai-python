@@ -1,10 +1,15 @@
 import base64
 import ctypes
+import io
+import wave
+from asyncio import to_thread
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 from livekit.rtc import AudioFrame as RtcAudioFrame
 
+from palabra_ai.constant import BYTES_PER_SAMPLE
 from palabra_ai.util.logger import error
 from palabra_ai.util.orjson import from_json, to_json
 
@@ -17,9 +22,9 @@ class AudioFrame:
     def __init__(
         self,
         data: np.ndarray | bytes,
-        sample_rate: int = 48000,
-        num_channels: int = 1,
-        samples_per_channel: int | None = None,
+        sample_rate: int,
+        num_channels: int,
+        samples_per_channel: int,
     ):
         if isinstance(data, bytes):
             # Convert bytes to numpy array
@@ -56,7 +61,15 @@ class AudioFrame:
         return cls(data, sample_rate, num_channels, samples_per_channel)
 
     def __repr__(self):
-        return f"AudioFrame(samples={self.samples_per_channel}, rate={self.sample_rate}, ch={self.num_channels})"
+        return f"🗣️<AF(s={self.samples_per_channel}, sr={self.sample_rate}, ch={self.num_channels})>"
+
+    def __bool__(self):
+        """Return False if data is empty, True otherwise"""
+        if self.data is None:
+            return False
+        if hasattr(self.data, "__len__"):
+            return len(self.data) > 0
+        return True
 
     @classmethod
     def from_rtc(cls, frame: RtcAudioFrame) -> "AudioFrame":
@@ -70,7 +83,11 @@ class AudioFrame:
 
     @classmethod
     def from_ws(
-        cls, raw_msg: bytes | str, sample_rate: int = 24000, num_channels: int = 1
+        cls,
+        raw_msg: bytes | str,
+        sample_rate: int,
+        num_channels: int,
+        samples_per_channel: int,
     ) -> Optional["AudioFrame"]:
         """Create AudioFrame from WebSocket message
 
@@ -112,7 +129,10 @@ class AudioFrame:
             audio_bytes = base64.b64decode(base64_data)
 
             return cls(
-                data=audio_bytes, sample_rate=sample_rate, num_channels=num_channels
+                data=audio_bytes,
+                sample_rate=sample_rate,
+                num_channels=num_channels,
+                samples_per_channel=samples_per_channel,
             )
         except Exception as e:
             error(f"Failed to decode audio data: {e}")
@@ -143,3 +163,36 @@ class AudioFrame:
                 "data": {"data": base64.b64encode(self.data)},
             }
         )
+
+
+@dataclass
+class AudioBuffer:
+    sample_rate: int
+    num_channels: int
+    b: io.BytesIO = field(default_factory=io.BytesIO, init=False)
+    drop_empty_frames: bool = field(default=False)
+
+    def to_wav_bytes(self) -> bytes:
+        """Convert buffer to WAV format"""
+        if self.b.getbuffer().nbytes == 0:
+            from palabra_ai.util.logger import warning
+
+            warning("Buffer is empty, returning empty WAV data")
+            return b""
+
+        with io.BytesIO() as wav_file:
+            with wave.open(wav_file, "wb") as wav:
+                wav.setnchannels(self.num_channels)
+                wav.setframerate(self.sample_rate)
+                wav.setsampwidth(BYTES_PER_SAMPLE)
+                wav.writeframes(self.b.getvalue())
+            return wav_file.getvalue()
+
+    async def write(self, frame: AudioFrame):
+        frame_bytes = frame.data.tobytes()
+        if self.drop_empty_frames and all(byte == 0 for byte in frame_bytes):
+            return
+        await to_thread(self.b.write, frame_bytes)
+
+    def replace_buffer(self, new_buffer: io.BytesIO):
+        self.b = new_buffer

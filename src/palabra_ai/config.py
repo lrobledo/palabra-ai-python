@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -14,8 +15,8 @@ from pydantic import (
     model_validator,
 )
 
-from palabra_ai.base.message import Message
 from palabra_ai.constant import (
+    BYTES_PER_SAMPLE,
     CONTEXT_SIZE_DEFAULT,
     DESIRED_QUEUE_LEVEL_MS_DEFAULT,
     ENERGY_VARIANCE_FACTOR_DEFAULT,
@@ -41,12 +42,13 @@ from palabra_ai.constant import (
 )
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.lang import Language
+from palabra_ai.message import Message
 from palabra_ai.types import T_ON_TRANSCRIPTION
 from palabra_ai.util.logger import set_logging
 from palabra_ai.util.orjson import from_json, to_json
 
 if TYPE_CHECKING:
-    from palabra_ai.base.adapter import Reader, Writer
+    from palabra_ai.task.adapter.base import Reader, Writer
 
 
 env = Env(prefix="PALABRA_")
@@ -82,8 +84,31 @@ class IoMode(BaseModel):
     num_channels: int
     chunk_duration_ms: int
 
+    @cached_property
+    def samples_per_channel(self) -> int:
+        return int(self.sample_rate * (self.chunk_duration_ms / 1000))
 
-class WebRtcMode(IoMode):
+    @cached_property
+    def bytes_per_channel(self) -> int:
+        return self.samples_per_channel * BYTES_PER_SAMPLE
+
+    @cached_property
+    def chunk_samples(self) -> int:
+        return self.samples_per_channel * self.num_channels
+
+    @cached_property
+    def chunk_bytes(self) -> int:
+        return self.bytes_per_channel * self.num_channels
+
+    @cached_property
+    def for_audio_frame(self) -> tuple[int, int, int]:
+        return self.sample_rate, self.num_channels, self.samples_per_channel
+
+    def __str__(self) -> str:
+        return f"[{self.name}: {self.sample_rate}Hz, {self.num_channels}ch, {self.chunk_duration_ms}ms]"
+
+
+class WebrtcMode(IoMode):
     name: str = "webrtc"
     sample_rate: int = 48000
     num_channels: int = 1
@@ -125,7 +150,12 @@ class WsMode(IoMode):
             },
             "output_stream": {
                 "content_type": "audio",
-                "target": {"type": "ws", "format": "pcm_s16le"},
+                "target": {
+                    "type": "ws",
+                    "format": "pcm_s16le",
+                    "sample_rate": self.sample_rate,
+                    "channels": self.num_channels,
+                },
             },
         }
 

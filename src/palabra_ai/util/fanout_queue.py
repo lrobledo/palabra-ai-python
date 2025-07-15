@@ -8,7 +8,7 @@ from typing import (
     TypeVar,
 )
 
-from palabra_ai.base.task_event import TaskEvent
+from palabra_ai.task.base import TaskEvent
 from palabra_ai.util.logger import debug
 
 T = TypeVar("T")

@@ -8,11 +8,11 @@ from dataclasses import dataclass, field
 
 from aioshutdown import SIGHUP, SIGINT, SIGTERM
 
-from palabra_ai.base.task_event import TaskEvent
 from palabra_ai.config import CLIENT_ID, CLIENT_SECRET, DEEP_DEBUG, Config
 from palabra_ai.debug.hang_coroutines import diagnose_hanging_tasks
 from palabra_ai.exc import ConfigurationError, unwrap_exceptions
 from palabra_ai.internal.rest import PalabraRESTClient
+from palabra_ai.task.base import TaskEvent
 from palabra_ai.task.manager import Manager
 from palabra_ai.util.logger import debug, error, success
 
@@ -87,7 +87,7 @@ class PalabraAI:
     async def process(
         self, cfg: Config, stopper: TaskEvent | None = None
     ) -> AsyncIterator[Manager]:
-        success("🤖 Connecting to Palabra.ai API...")
+        success(f"🤖 Connecting to Palabra.ai API with {cfg.mode}...")
         if stopper is None:
             stopper = TaskEvent()
 

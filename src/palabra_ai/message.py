@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Union
 import orjson
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
-from palabra_ai.base.enum import Channel, Direction
-from palabra_ai.exc import ApiError, ApiValidationError
+from palabra_ai.enum import Channel, Direction
+from palabra_ai.exc import ApiError, ApiValidationError, TaskNotFoundError
 from palabra_ai.lang import Language
 from palabra_ai.util.logger import debug
 from palabra_ai.util.orjson import from_json
@@ -336,6 +336,9 @@ class ErrorMessage(Message):
         match known_raw.data:
             case {"data": {"code": "VALIDATION_ERROR", "desc": desc}}:
                 obj._exc = ApiValidationError(str(desc))
+                obj.data = known_raw.data
+            case {"data": {"code": "NOT_FOUND", "desc": desc}}:
+                obj._exc = TaskNotFoundError(str(desc))
                 obj.data = known_raw.data
             case _:
                 obj._exc = ApiError(str(known_raw.data))

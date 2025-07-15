@@ -8,16 +8,16 @@ from dataclasses import KW_ONLY, dataclass, field
 from functools import partial
 from typing import NamedTuple
 
-from palabra_ai.base.adapter import Reader, Writer
+from palabra_ai.audio import AudioFrame
 from palabra_ai.constant import (
     AUDIO_CHUNK_SECONDS,
     CHANNELS_MONO,
     DEVICE_ID_HASH_LENGTH,
     SAMPLE_RATE_DEFAULT,
-    SLEEP_INTERVAL_DEFAULT,
     THREADPOOL_MAX_WORKERS,
 )
 from palabra_ai.internal.device import SoundDeviceManager
+from palabra_ai.task.adapter.base import Reader, Writer
 from palabra_ai.util.logger import debug, error, warning
 
 
@@ -192,10 +192,6 @@ class DeviceReader(Reader):
         )
         debug(f"Started input: {device_name}")
 
-    async def do(self):
-        while not self.stopper and not self.eof:
-            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
-
     async def exit(self):
         try:
             device_name = (
@@ -235,19 +231,14 @@ class DeviceWriter(Writer):
         device_name = (
             self.device.name if isinstance(self.device, Device) else self.device
         )
-        sample_rate = self.cfg.mode.sample_rate if self.cfg else SAMPLE_RATE_DEFAULT
         self._output_device = self._sdm.start_output_device(
             device_name,
-            channels=CHANNELS_MONO,
-            sample_rate=sample_rate,
+            channels=self.cfg.mode.num_channels,
+            sample_rate=self.cfg.mode.sample_rate,
         )
         self._loop = asyncio.get_running_loop()
         # Base Writer class will handle queue processing
         await super().boot()
-
-    async def do(self):
-        while not self.stopper:
-            await asyncio.sleep(SLEEP_INTERVAL_DEFAULT)
 
     async def exit(self):
         await self._stop_device()
@@ -265,7 +256,7 @@ class DeviceWriter(Writer):
             except Exception as e:
                 error(f"Error stopping output device: {e}")
 
-    async def _write_frame(self, frame):
+    async def write(self, frame: AudioFrame):
         """Write a single frame to the audio device"""
         try:
             audio_bytes = frame.data.tobytes()

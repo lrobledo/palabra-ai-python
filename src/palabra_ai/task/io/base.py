@@ -1,45 +1,42 @@
 import abc
 import time
 from asyncio import get_running_loop, sleep
+from collections.abc import Callable
 from dataclasses import KW_ONLY, dataclass, field
-from functools import cached_property
-from typing import Callable
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from palabra_ai.base.audio import AudioFrame
-from palabra_ai.base.enum import Channel, Direction
-from palabra_ai.base.message import (
+from palabra_ai.audio import AudioFrame
+from palabra_ai.constant import BOOT_TIMEOUT, BYTES_PER_SAMPLE, SLEEP_INTERVAL_LONG
+from palabra_ai.enum import Channel, Direction
+from palabra_ai.message import (
     CurrentTaskMessage,
     Dbg,
     EndTaskMessage,
     GetTaskMessage,
     SetTaskMessage,
 )
-from palabra_ai.base.task import Task
-from palabra_ai.constant import BOOT_TIMEOUT, SLEEP_INTERVAL_LONG
+from palabra_ai.task.base import Task
 from palabra_ai.util.fanout_queue import FanoutQueue
 from palabra_ai.util.logger import debug
 from palabra_ai.util.orjson import to_json
 
 if TYPE_CHECKING:
-    from palabra_ai.base.adapter import Reader, Writer
-    from palabra_ai.base.message import Message
-    from palabra_ai.config import Config
     from palabra_ai.internal.rest import SessionCredentials
+    from palabra_ai.message import Message
+    from palabra_ai.task.adapter import Reader, Writer
 
 
 @dataclass
 class Io(Task):
-    cfg: "Config"
     credentials: "SessionCredentials"
     reader: "Reader"
     writer: "Writer"
     _: KW_ONLY
     in_msg_foq: FanoutQueue["Message"] = field(default_factory=FanoutQueue, init=False)
     out_msg_foq: FanoutQueue["Message"] = field(default_factory=FanoutQueue, init=False)
-    _buffer_callback: Callable | None  = field(default=None, init=False)
+    _buffer_callback: Callable | None = field(default=None, init=False)
 
     @property
     @abc.abstractmethod
@@ -64,18 +61,6 @@ class Io(Task):
         debug(f"Pushing message: {msg!r}")
         self.in_msg_foq.publish(msg)
 
-    @cached_property
-    def chunk_size(self) -> int:
-        """Calculate chunk size from sample rate and duration."""
-        return int(self.cfg.mode.sample_rate * (self.cfg.mode.chunk_duration_ms / 1000))
-
-    @cached_property
-    def reader_chunk_size(self) -> int:
-        """Calculate reader chunk size in bytes."""
-        return int(
-            self.cfg.mode.sample_rate * (self.cfg.mode.chunk_duration_ms / 1000) * 2
-        )
-
     async def in_msg_sender(self):
         """Send messages from the input queue through the transport."""
         async with self.in_msg_foq.receiver(self, self.stopper) as msgs:
@@ -91,7 +76,7 @@ class Io(Task):
         """Main processing loop - read audio chunks and push them."""
         await self.reader.ready
         while not self.stopper and not self.eof:
-            chunk = await self.reader.read(self.reader_chunk_size)
+            chunk = await self.reader.read(self.cfg.mode.chunk_bytes)
 
             if chunk is None:
                 debug(f"T{self.name}: Audio EOF reached")
@@ -101,32 +86,33 @@ class Io(Task):
 
             if not chunk:
                 continue
-
+            start_time = time.time()
             await self.push(chunk)
-            await self.do_post_chunk()
+            stop_time = time.time()
+            await self.wait_after_push(stop_time - start_time)
 
-    async def do_post_chunk(self):
+    async def wait_after_push(self, delta: float):
         """Hook for subclasses to add post-chunk processing."""
-        await sleep(self.cfg.mode.chunk_duration_ms / 1000)
+        await sleep(self.cfg.mode.chunk_duration_ms / 1000 - delta)
 
     def new_frame(self) -> "AudioFrame":
-        return AudioFrame.create(
-            self.cfg.mode.sample_rate, self.cfg.mode.num_channels, self.chunk_size
-        )
+        return AudioFrame.create(*self.cfg.mode.for_audio_frame)
 
     async def push(self, audio_bytes: bytes) -> None:
         """Process and send audio chunks."""
-        samples_per_channel = self.chunk_size
-        total_samples = len(audio_bytes) // 2
+        samples_per_channel = self.cfg.mode.samples_per_channel
+        total_samples = len(audio_bytes) // BYTES_PER_SAMPLE
         audio_frame = self.new_frame()
         audio_data = np.frombuffer(audio_frame.data, dtype=np.int16)
 
         for i in range(0, total_samples, samples_per_channel):
             if get_running_loop().is_closed():
                 break
-            frame_chunk = audio_bytes[i * 2 : (i + samples_per_channel) * 2]
+            frame_chunk = audio_bytes[
+                i * BYTES_PER_SAMPLE : (i + samples_per_channel) * BYTES_PER_SAMPLE
+            ]
 
-            if len(frame_chunk) < samples_per_channel * 2:
+            if len(frame_chunk) < samples_per_channel * BYTES_PER_SAMPLE:
                 padded_chunk = np.zeros(samples_per_channel, dtype=np.int16)
                 frame_chunk = np.frombuffer(frame_chunk, dtype=np.int16)
                 padded_chunk[: len(frame_chunk)] = frame_chunk
@@ -134,6 +120,7 @@ class Io(Task):
                 padded_chunk = np.frombuffer(frame_chunk, dtype=np.int16)
 
             np.copyto(audio_data, padded_chunk)
+
             await self.send_frame(audio_frame)
 
     async def _exit(self):
