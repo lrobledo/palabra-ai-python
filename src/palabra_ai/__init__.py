@@ -54,7 +54,7 @@ from palabra_ai.lang import (
     TA,
     TR,
     UK,
-    VN,
+    VI,
     ZH,
 )  # noqa: F401
 
@@ -121,7 +121,7 @@ __all__ = [
     "TA",
     "TR",
     "UK",
-    "VN",
+    "VI",
     "ZH",
     # Version
     "__version__",
