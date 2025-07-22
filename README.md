@@ -137,7 +137,7 @@ from palabra_ai import (
     EN,
     ES,
 )
-from palabra_ai.message import TranscriptionMessage
+from palabra_ai.base.message import TranscriptionMessage
 
 
 async def print_translation_async(msg: TranscriptionMessage):
