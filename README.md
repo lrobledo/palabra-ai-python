@@ -46,6 +46,25 @@
 pip install palabra-ai
 ```
 
+### macOS SSL Certificate Setup 🔒
+
+If you encounter SSL certificate errors on macOS like:
+```
+SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate
+```
+
+**Option 1: Install Python certificates** (recommended)
+```zsh
+/Applications/Python\ $(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")/Install\ Certificates.command
+```
+
+**Option 2: Use system certificates**
+```bash
+pip install pip-system-certs
+```
+
+This will configure Python to use your system's certificate store.
+
 ## Quick Start 🚀
 
 ### Real-time microphone translation 🎤
@@ -124,8 +143,10 @@ from palabra_ai.base.message import TranscriptionMessage
 async def print_translation_async(msg: TranscriptionMessage):
     print(repr(msg))
 
+
 def print_translation(msg: TranscriptionMessage):
     print(str(msg))
+
 
 palabra = PalabraAI()
 cfg = Config(
