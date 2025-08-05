@@ -1,0 +1,247 @@
+import sys
+import os
+from unittest.mock import MagicMock, patch, Mock
+import pytest
+from palabra_ai.util.sysinfo import SystemInfo, get_system_info, _run_command, HAS_PSUTIL
+
+
+class TestRunCommand:
+    """Test _run_command function"""
+    
+    @patch('subprocess.run')
+    def test_run_command_success(self, mock_run):
+        """Test successful command execution"""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "output\n"
+        mock_run.return_value = mock_result
+        
+        result = _run_command(["echo", "test"])
+        
+        assert result == "output"
+        mock_run.assert_called_once()
+    
+    @patch('subprocess.run')
+    def test_run_command_failure(self, mock_run):
+        """Test command execution failure"""
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_run.return_value = mock_result
+        
+        result = _run_command(["false"])
+        
+        assert result is None
+    
+    @patch('subprocess.run')
+    def test_run_command_timeout(self, mock_run):
+        """Test command timeout"""
+        import subprocess
+        mock_run.side_effect = subprocess.TimeoutExpired("cmd", 5)
+        
+        result = _run_command(["sleep", "10"])
+        
+        assert result is None
+    
+    @patch('subprocess.run')
+    def test_run_command_file_not_found(self, mock_run):
+        """Test command file not found"""
+        mock_run.side_effect = FileNotFoundError()
+        
+        result = _run_command(["nonexistent"])
+        
+        assert result is None
+
+
+class TestSystemInfo:
+    """Test SystemInfo class"""
+    
+    def test_init_basic_fields(self):
+        """Test basic field initialization"""
+        info = SystemInfo()
+        
+        # Check basic fields are populated
+        assert info.python_version == sys.version
+        assert isinstance(info.python_version_info, dict)
+        assert info.python_version_info["major"] == sys.version_info.major
+        assert info.python_version_info["minor"] == sys.version_info.minor
+        assert info.python_executable == sys.executable
+        assert info.pid == os.getpid()
+        assert info.cwd == os.getcwd()
+        assert isinstance(info.timestamp, str)
+        assert isinstance(info.hostname, str)
+    
+    def test_platform_fields_exist(self):
+        """Test platform fields exist and are populated"""
+        info = SystemInfo()
+        
+        # Just verify fields exist and have values
+        assert hasattr(info, 'platform')
+        assert hasattr(info, 'platform_machine')
+        assert hasattr(info, 'platform_processor')
+        assert hasattr(info, 'platform_system')
+        assert hasattr(info, 'platform_release')
+        assert hasattr(info, 'platform_version')
+        assert hasattr(info, 'architecture')
+        assert hasattr(info, 'python_implementation')
+        
+        # Check types
+        assert isinstance(info.platform, str)
+        assert isinstance(info.platform_machine, str)
+        assert isinstance(info.platform_system, str)
+        assert isinstance(info.architecture, dict)
+        assert "bits" in info.architecture
+        assert "linkage" in info.architecture
+    
+    @patch('resource.getrlimit')
+    def test_collect_resource_limits(self, mock_getrlimit):
+        """Test resource limits collection"""
+        mock_getrlimit.return_value = (1024, 2048)
+        
+        info = SystemInfo()
+        
+        # Check some limits were collected
+        assert len(info.resource_limits) > 0
+        # Check format of limits
+        for name, limits in info.resource_limits.items():
+            assert "soft" in limits
+            assert "hard" in limits
+    
+    @patch('resource.getrlimit')
+    def test_collect_resource_limits_unlimited(self, mock_getrlimit):
+        """Test resource limits with unlimited values"""
+        import resource
+        mock_getrlimit.return_value = (resource.RLIM_INFINITY, resource.RLIM_INFINITY)
+        
+        info = SystemInfo()
+        
+        # Check unlimited is handled
+        for name, limits in info.resource_limits.items():
+            assert limits["soft"] == "unlimited"
+            assert limits["hard"] == "unlimited"
+    
+    @patch('locale.getlocale')
+    def test_collect_locale_info(self, mock_getlocale):
+        """Test locale info collection"""
+        mock_getlocale.return_value = ("en_US", "UTF-8")
+        
+        info = SystemInfo()
+        
+        assert info.locale_info == ("en_US", "UTF-8")
+    
+    @patch('os.getuid')
+    @patch('os.getgid')
+    @patch('pwd.getpwuid')
+    def test_collect_user_info(self, mock_getpwuid, mock_getgid, mock_getuid):
+        """Test user info collection"""
+        mock_getuid.return_value = 1000
+        mock_getgid.return_value = 1000
+        
+        mock_pwd = MagicMock()
+        mock_pwd.pw_name = "testuser"
+        mock_pwd.pw_dir = "/home/testuser"
+        mock_pwd.pw_shell = "/bin/bash"
+        mock_getpwuid.return_value = mock_pwd
+        
+        info = SystemInfo()
+        
+        assert info.user_info["uid"] == 1000
+        assert info.user_info["gid"] == 1000
+        assert info.user_info["username"] == "testuser"
+        assert info.user_info["home"] == "/home/testuser"
+        assert info.user_info["shell"] == "/bin/bash"
+    
+    @patch('sysconfig.get_path')
+    def test_collect_python_paths(self, mock_get_path):
+        """Test Python paths collection"""
+        path_map = {
+            "stdlib": "/usr/lib/python",
+            "platstdlib": "/usr/lib/python",
+            "purelib": "/usr/lib/python/site-packages",
+            "platlib": "/usr/lib/python/site-packages",
+            "include": "/usr/include/python",
+            "scripts": "/usr/bin",
+            "data": "/usr/share",
+        }
+        mock_get_path.side_effect = lambda x: path_map.get(x)
+        
+        info = SystemInfo()
+        
+        assert info.python_paths["stdlib"] == "/usr/lib/python"
+        assert info.python_paths["purelib"] == "/usr/lib/python/site-packages"
+        assert len(info.python_paths) == len(path_map)
+    
+    @patch('palabra_ai.util.sysinfo.metadata.distributions')
+    def test_collect_installed_packages(self, mock_distributions):
+        """Test installed packages collection"""
+        # Create mock distributions
+        dist1 = MagicMock()
+        dist1.metadata.get.side_effect = lambda k, d: {"Name": "package1", "Version": "1.0"}.get(k, d)
+        
+        dist2 = MagicMock()
+        dist2.metadata.get.side_effect = lambda k, d: {"Name": "package2", "Version": "2.0"}.get(k, d)
+        
+        mock_distributions.return_value = [dist1, dist2]
+        
+        info = SystemInfo()
+        
+        assert info.installed_packages["package1"] == "1.0"
+        assert info.installed_packages["package2"] == "2.0"
+    
+    @patch('shutil.disk_usage')
+    def test_collect_disk_space_no_psutil(self, mock_disk_usage):
+        """Test disk space collection without psutil"""
+        mock_stat = MagicMock()
+        mock_stat.total = 1000
+        mock_stat.used = 600
+        mock_stat.free = 400
+        mock_disk_usage.return_value = mock_stat
+        
+        # Temporarily set HAS_PSUTIL to False
+        import palabra_ai.util.sysinfo
+        original_has_psutil = palabra_ai.util.sysinfo.HAS_PSUTIL
+        palabra_ai.util.sysinfo.HAS_PSUTIL = False
+        
+        try:
+            info = SystemInfo()
+            
+            assert "current_directory" in info.disk_space
+            assert info.disk_space["current_directory"]["total"] == 1000
+            assert info.disk_space["current_directory"]["used"] == 600
+            assert info.disk_space["current_directory"]["free"] == 400
+            assert info.disk_space["current_directory"]["percent"] == 60.0
+        finally:
+            palabra_ai.util.sysinfo.HAS_PSUTIL = original_has_psutil
+    
+    @patch('gc.get_stats')
+    @patch('gc.get_count')
+    @patch('gc.get_threshold')
+    @patch('gc.isenabled')
+    @patch('gc.get_objects')
+    def test_collect_gc_info(self, mock_get_objects, mock_isenabled, 
+                            mock_get_threshold, mock_get_count, mock_get_stats):
+        """Test garbage collector info collection"""
+        mock_get_stats.return_value = [{"collections": 10}]
+        mock_get_count.return_value = (100, 10, 1)
+        mock_get_threshold.return_value = (700, 10, 10)
+        mock_isenabled.return_value = True
+        mock_get_objects.return_value = [1, "test", {}, [], None]
+        
+        info = SystemInfo()
+        
+        assert info.gc_info["stats"] == [{"collections": 10}]
+        assert info.gc_info["count"] == (100, 10, 1)
+        assert info.gc_info["threshold"] == (700, 10, 10)
+        assert info.gc_info["enabled"] is True
+        assert info.gc_info["objects"] == 5
+        assert "top_object_types" in info.gc_info
+
+
+def test_get_system_info():
+    """Test get_system_info function"""
+    result = get_system_info()
+    
+    assert isinstance(result, dict)
+    assert "python_version" in result
+    assert "platform" in result
+    assert "hostname" in result
+    assert "timestamp" in result

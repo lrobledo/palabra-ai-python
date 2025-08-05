@@ -104,7 +104,7 @@ class AudioFrame:
             return None
         elif isinstance(raw_msg, str) and "output_audio_data" not in raw_msg:
             return None
-        elif isinstance(raw_msg, bytes) and not b"output_audio_data" not in raw_msg:
+        elif isinstance(raw_msg, bytes) and b"output_audio_data" not in raw_msg:
             return None
 
         msg = from_json(raw_msg)
