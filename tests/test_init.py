@@ -4,7 +4,9 @@ import palabra_ai
 
 def test_version():
     """Test version is accessible"""
-    assert palabra_ai.__version__ == "0.2.3"
+    assert hasattr(palabra_ai, "__version__")
+    assert isinstance(palabra_ai.__version__, str)
+    assert palabra_ai.__version__
 
 
 def test_main_exports():

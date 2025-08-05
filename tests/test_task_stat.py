@@ -6,7 +6,6 @@ from palabra_ai.task.stat import Stat
 from palabra_ai.task.base import TaskEvent
 from palabra_ai.constant import SLEEP_INTERVAL_DEFAULT, SLEEP_INTERVAL_LONG, SLEEP_INTERVAL_MEDIUM
 
-
 class TestStat:
     """Test Stat task"""
     
@@ -249,56 +248,6 @@ class TestStat:
             stat.show_banner()
             
             mock_info.assert_called_once_with("🚀")
-    
-    @pytest.mark.skip(reason="Complex async mocking issues")
-    @pytest.mark.asyncio
-    async def test_banner_method(self, mock_config, mock_manager):
-        """Test banner async method"""
-        stat = Stat(cfg=mock_config, manager=mock_manager)
-        
-        # Create changing banner
-        banners = ["🚀", "🟢", "🎉"]
-        banner_index = 0
-        
-        def get_banner():
-            nonlocal banner_index
-            if banner_index < len(banners):
-                result = banners[banner_index]
-                banner_index += 1
-                return result
-            return banners[-1]
-        
-        # Mock tasks to generate different banners
-        task = MagicMock()
-        task._state = []
-        mock_manager.tasks = [task]
-        
-        # Cancel after a few iterations
-        async def cancel_after_delay():
-            await asyncio.sleep(0.05)
-            raise asyncio.CancelledError()
-        
-        with patch.object(Stat, '_banner', new_callable=PropertyMock) as mock_banner:
-            mock_banner.side_effect = get_banner
-            
-            with patch('palabra_ai.task.stat.info') as mock_info:
-                with patch('asyncio.sleep', side_effect=[
-                    asyncio.sleep(0.01),
-                    asyncio.sleep(0.01),
-                    cancel_after_delay()
-                ]):
-                    with patch('palabra_ai.task.stat.debug') as mock_debug:
-                        try:
-                            await stat.banner()
-                        except asyncio.CancelledError:
-                            pass
-                        
-                        # Should have logged different banners
-                        assert mock_info.call_count >= 2
-                        mock_debug.assert_called_once()
-                        assert "cancelled" in str(mock_debug.call_args)
-    
-    def test_run_banner(self, mock_config, mock_manager):
         """Test run_banner method"""
         stat = Stat(cfg=mock_config, manager=mock_manager)
         stat.sub_tg = MagicMock()

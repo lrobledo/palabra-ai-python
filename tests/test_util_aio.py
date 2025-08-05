@@ -3,25 +3,21 @@ import pytest
 from palabra_ai.util.aio import boot, shutdown, any_event, all_events, warn_if_cancel
 from palabra_ai.constant import BOOT_TIMEOUT, SHUTDOWN_TIMEOUT
 
-
 async def quick_task():
     """Quick async task that completes immediately"""
     await asyncio.sleep(0.01)
     return "done"
-
 
 async def slow_task():
     """Slow async task that will timeout"""
     await asyncio.sleep(100)
     return "never"
 
-
 @pytest.mark.asyncio
 async def test_boot_success():
     """Test boot with task that completes in time"""
     result = await boot(quick_task())
     assert result == "done"
-
 
 @pytest.mark.skip(reason="Temporarily disabled for coverage check")
 @pytest.mark.asyncio
@@ -30,13 +26,11 @@ async def test_boot_timeout():
     with pytest.raises(asyncio.TimeoutError):
         await boot(slow_task())
 
-
 @pytest.mark.asyncio
 async def test_shutdown_success():
     """Test shutdown with task that completes in time"""
     result = await shutdown(quick_task())
     assert result == "done"
-
 
 @pytest.mark.skip(reason="Temporarily disabled for coverage check")
 @pytest.mark.asyncio
@@ -44,7 +38,6 @@ async def test_shutdown_timeout():
     """Test shutdown with task that times out"""
     with pytest.raises(asyncio.TimeoutError):
         await shutdown(slow_task())
-
 
 @pytest.mark.asyncio
 async def test_any_event():
@@ -63,7 +56,6 @@ async def test_any_event():
     await any_event(event1, event2)
     assert event1.is_set()
     assert not event2.is_set()
-
 
 @pytest.mark.asyncio
 async def test_all_events():
@@ -85,13 +77,11 @@ async def test_all_events():
     assert event1.is_set()
     assert event2.is_set()
 
-
 @pytest.mark.asyncio
 async def test_warn_if_cancel_success():
     """Test warn_if_cancel with successful task"""
     result = await warn_if_cancel(quick_task(), "Should not see this warning")
     assert result == "done"
-
 
 @pytest.mark.asyncio
 async def test_warn_if_cancel_cancelled():

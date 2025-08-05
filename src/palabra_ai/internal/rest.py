@@ -70,8 +70,7 @@ class PalabraRESTClient:
             connector = aiohttp.TCPConnector(ssl=ssl_context)
 
             session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
-                connector=connector
+                timeout=aiohttp.ClientTimeout(total=self.timeout), connector=connector
             )
 
             response = await session.post(
@@ -102,7 +101,9 @@ class PalabraRESTClient:
                 error(f"SSL Certificate Error: {e}")
                 if sys.platform == "darwin":
                     error("On macOS, please run:")
-                    error(f"/Applications/Python\\ {sys.version_info.major}.{sys.version_info.minor}/Install\\ Certificates.command")
+                    error(
+                        f"/Applications/Python\\ {sys.version_info.major}.{sys.version_info.minor}/Install\\ Certificates.command"
+                    )
                     error("Or see the README for SSL setup instructions")
                 else:
                     error("Please ensure SSL certificates are properly installed")

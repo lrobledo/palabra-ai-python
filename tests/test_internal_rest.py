@@ -6,7 +6,6 @@ import aiohttp
 from palabra_ai.internal.rest import SessionCredentials, PalabraRESTClient
 from palabra_ai.exc import ConfigurationError
 
-
 class TestSessionCredentials:
     """Test SessionCredentials model"""
     
@@ -151,7 +150,6 @@ class TestSessionCredentials:
         with pytest.raises(ConfigurationError) as exc_info:
             _ = creds.webrtc_url
         assert "Stream URL is missing" in str(exc_info.value)
-
 
 class TestPalabraRESTClient:
     """Test PalabraRESTClient class"""

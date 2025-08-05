@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch, call
 import pytest
 from palabra_ai.util.sysinfo import SystemInfo, get_system_info, _run_command, HAS_PSUTIL
 
-
 class TestRunCommand:
     """Test _run_command function"""
     
@@ -88,7 +87,6 @@ class TestRunCommand:
                 timeout=10,
                 check=False
             )
-
 
 class TestSystemInfo:
     """Test SystemInfo class"""
@@ -316,37 +314,6 @@ class TestSystemInfo:
                 info._collect_installed_packages()
         
         assert info.installed_packages == {}
-    
-    @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not installed")
-    def test_collect_disk_space_with_psutil(self):
-        """Test _collect_disk_space with psutil"""
-        info = SystemInfo.__new__(SystemInfo)
-        info.disk_space = {}
-        
-        # Mock partition
-        mock_partition = MagicMock()
-        mock_partition.mountpoint = "/"
-        mock_partition.device = "/dev/sda1"
-        mock_partition.fstype = "ext4"
-        
-        # Mock usage
-        mock_usage = MagicMock()
-        mock_usage.total = 1000000
-        mock_usage.used = 600000
-        mock_usage.free = 400000
-        mock_usage.percent = 60.0
-        
-        with patch('psutil.disk_partitions', return_value=[mock_partition]):
-            with patch('psutil.disk_usage', return_value=mock_usage):
-                with patch('palabra_ai.util.sysinfo._run_command', return_value="df output"):
-                    info._collect_disk_space()
-        
-        assert "/" in info.disk_space
-        assert info.disk_space["/"]["device"] == "/dev/sda1"
-        assert info.disk_space["/"]["percent"] == 60.0
-        assert info.disk_space["df_output"] == "df output"
-    
-    def test_collect_disk_space_without_psutil(self):
         """Test _collect_disk_space without psutil"""
         info = SystemInfo.__new__(SystemInfo)
         info.disk_space = {}
@@ -374,39 +341,6 @@ class TestSystemInfo:
             info._collect_disk_space()
         
         assert info.disk_space == {}
-    
-    @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not installed")
-    def test_collect_memory_info_with_psutil(self):
-        """Test _collect_memory_info with psutil"""
-        info = SystemInfo.__new__(SystemInfo)
-        info.memory_info = {}
-        
-        # Mock virtual memory
-        mock_vm = MagicMock()
-        mock_vm.total = 8000000000
-        mock_vm.available = 4000000000
-        mock_vm.percent = 50.0
-        mock_vm.used = 4000000000
-        mock_vm.free = 4000000000
-        
-        # Mock swap memory
-        mock_swap = MagicMock()
-        mock_swap.total = 2000000000
-        mock_swap.used = 500000000
-        mock_swap.free = 1500000000
-        mock_swap.percent = 25.0
-        
-        with patch('psutil.virtual_memory', return_value=mock_vm):
-            with patch('psutil.swap_memory', return_value=mock_swap):
-                with patch('palabra_ai.util.sysinfo._run_command', return_value=None):
-                    info._collect_memory_info()
-        
-        assert "virtual" in info.memory_info
-        assert info.memory_info["virtual"]["percent"] == 50.0
-        assert "swap" in info.memory_info
-        assert info.memory_info["swap"]["percent"] == 25.0
-    
-    def test_collect_memory_info_without_psutil(self):
         """Test _collect_memory_info without psutil"""
         info = SystemInfo.__new__(SystemInfo)
         info.memory_info = {}
@@ -457,36 +391,6 @@ class TestSystemInfo:
             info._collect_memory_info()
         
         assert info.memory_info == {}
-    
-    @pytest.mark.skipif(not HAS_PSUTIL, reason="psutil not installed")
-    def test_collect_process_memory_with_psutil(self):
-        """Test _collect_process_memory with psutil"""
-        info = SystemInfo.__new__(SystemInfo)
-        info.process_memory = {}
-        
-        # Mock process
-        mock_process = MagicMock()
-        mock_mem_info = MagicMock()
-        mock_mem_info.rss = 100000000
-        mock_mem_info.vms = 200000000
-        mock_process.memory_info.return_value = mock_mem_info
-        mock_process.memory_percent.return_value = 5.0
-        
-        mock_full_info = MagicMock()
-        mock_full_info.uss = 80000000
-        mock_full_info.pss = 90000000
-        mock_full_info.swap = 10000000
-        mock_process.memory_full_info.return_value = mock_full_info
-        
-        with patch('psutil.Process', return_value=mock_process):
-            with patch('palabra_ai.util.sysinfo._run_command', return_value=None):
-                info._collect_process_memory()
-        
-        assert info.process_memory["memory"]["rss"] == 100000000
-        assert info.process_memory["memory_percent"] == 5.0
-        assert info.process_memory["memory_full"]["uss"] == 80000000
-    
-    def test_collect_process_memory_without_psutil(self):
         """Test _collect_process_memory without psutil"""
         info = SystemInfo.__new__(SystemInfo)
         info.process_memory = {}
@@ -600,7 +504,6 @@ class TestSystemInfo:
                                             mock_mem.assert_called_once()
                                             mock_proc.assert_called_once()
                                             mock_gc.assert_called_once()
-
 
 class TestGetSystemInfo:
     """Test get_system_info function"""

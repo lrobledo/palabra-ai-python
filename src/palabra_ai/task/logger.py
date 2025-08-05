@@ -81,7 +81,7 @@ class Logger(Task):
             "sysinfo": sysinfo,
             "messages": self._messages,
             "start_ts": self._start_ts,
-            "cfg": self.cfg.to_dict() if hasattr(self.cfg, 'to_dict') else {},
+            "cfg": self.cfg.to_dict() if hasattr(self.cfg, "to_dict") else {},
             "log_file": str(self.cfg.log_file),
             "trace_file": str(self.cfg.trace_file),
             "debug": self.cfg.debug,
@@ -102,7 +102,7 @@ class Logger(Task):
                 await asyncio.gather(
                     asyncio.wait_for(self._in_task, timeout=SHUTDOWN_TIMEOUT),
                     asyncio.wait_for(self._out_task, timeout=SHUTDOWN_TIMEOUT),
-                    return_exceptions=True  # This will return CancelledError instead of raising it
+                    return_exceptions=True,  # This will return CancelledError instead of raising it
                 )
             except Exception:
                 pass  # Tasks may be cancelled, which is expected

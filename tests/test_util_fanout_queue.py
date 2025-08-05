@@ -4,7 +4,6 @@ import pytest
 from palabra_ai.util.fanout_queue import FanoutQueue, Subscription
 from palabra_ai.task.base import TaskEvent
 
-
 class TestFanoutQueue:
     """Test FanoutQueue class"""
     

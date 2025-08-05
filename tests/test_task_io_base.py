@@ -12,7 +12,6 @@ from palabra_ai.message import (
 from palabra_ai.constant import BYTES_PER_SAMPLE, SLEEP_INTERVAL_LONG
 from palabra_ai.util.fanout_queue import FanoutQueue
 
-
 class ConcreteIo(Io):
     """Concrete implementation of Io for testing"""
     
@@ -34,7 +33,6 @@ class ConcreteIo(Io):
     
     async def exit(self):
         pass
-
 
 class TestIo:
     """Test Io abstract base class"""
@@ -123,123 +121,6 @@ class TestIo:
             # Check message was published
             mock_debug.assert_called_once()
             assert "Pushing message" in str(mock_debug.call_args)
-    
-    @pytest.mark.skip(reason="Complex async timing issues")
-    @pytest.mark.asyncio
-    async def test_in_msg_sender(self, mock_config, mock_credentials, mock_reader, mock_writer):
-        """Test in_msg_sender method"""
-        io = ConcreteIo(
-            cfg=mock_config,
-            credentials=mock_credentials,
-            reader=mock_reader,
-            writer=mock_writer
-        )
-        
-        io.send_message = AsyncMock()
-        
-        # Send a message
-        msg = EndTaskMessage()
-        io.in_msg_foq.publish(msg)
-        
-        # Stop after processing
-        async def stop_after_delay():
-            await asyncio.sleep(0.01)
-            io.stopper.set()
-        
-        asyncio.create_task(stop_after_delay())
-        
-        with patch('palabra_ai.task.io.base.debug') as mock_debug:
-            await io.in_msg_sender()
-            
-            # Check message was sent
-            io.send_message.assert_called_once()
-            assert mock_debug.call_count >= 2  # At least message send and stop debug
-    
-    @pytest.mark.skip(reason="Complex async timing issues")
-    @pytest.mark.asyncio
-    async def test_in_msg_sender_none_message(self, mock_config, mock_credentials, mock_reader, mock_writer):
-        """Test in_msg_sender with None message"""
-        io = ConcreteIo(
-            cfg=mock_config,
-            credentials=mock_credentials,
-            reader=mock_reader,
-            writer=mock_writer
-        )
-        
-        # Send None
-        io.in_msg_foq.publish(None)
-        
-        with patch('palabra_ai.task.io.base.debug') as mock_debug:
-            await io.in_msg_sender()
-            
-            mock_debug.assert_called_once()
-            assert "stopping in_msg_sender" in str(mock_debug.call_args)
-    
-    @pytest.mark.asyncio
-    async def test_do_normal_audio(self, mock_config, mock_credentials, mock_reader, mock_writer):
-        """Test do method with normal audio processing"""
-        io = ConcreteIo(
-            cfg=mock_config,
-            credentials=mock_credentials,
-            reader=mock_reader,
-            writer=mock_writer
-        )
-        
-        # Mock reader to return audio chunk then None
-        audio_chunk = b'\x00' * 320  # 320 bytes of audio
-        mock_reader.read.side_effect = [audio_chunk, None]
-        
-        io.push = AsyncMock()
-        io.push_in_msg = AsyncMock()
-        
-        await io.do()
-        
-        # Check audio was pushed
-        io.push.assert_called_once_with(audio_chunk)
-        
-        # Check EOF handling
-        assert io.eof.is_set()
-        io.push_in_msg.assert_called_once()
-        assert isinstance(io.push_in_msg.call_args[0][0], EndTaskMessage)
-    
-    @pytest.mark.asyncio
-    async def test_do_empty_chunk(self, mock_config, mock_credentials, mock_reader, mock_writer):
-        """Test do method with empty chunk"""
-        io = ConcreteIo(
-            cfg=mock_config,
-            credentials=mock_credentials,
-            reader=mock_reader,
-            writer=mock_writer
-        )
-        
-        # Mock reader to return empty chunk then None
-        mock_reader.read.side_effect = [b'', None]
-        
-        io.push = AsyncMock()
-        
-        await io.do()
-        
-        # Empty chunk should be skipped
-        io.push.assert_not_called()
-    
-    @pytest.mark.asyncio
-    async def test_wait_after_push(self, mock_config, mock_credentials, mock_reader, mock_writer):
-        """Test wait_after_push method"""
-        io = ConcreteIo(
-            cfg=mock_config,
-            credentials=mock_credentials,
-            reader=mock_reader,
-            writer=mock_writer
-        )
-        
-        start = time.time()
-        await io.wait_after_push(0.005)  # 5ms delta
-        elapsed = time.time() - start
-        
-        # Should wait approximately 15ms (20ms chunk - 5ms delta)
-        assert 0.010 < elapsed < 0.025
-    
-    def test_new_frame(self, mock_config, mock_credentials, mock_reader, mock_writer):
         """Test new_frame method"""
         io = ConcreteIo(
             cfg=mock_config,

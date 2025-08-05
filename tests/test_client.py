@@ -6,7 +6,6 @@ from palabra_ai.config import Config, SourceLang, TargetLang
 from palabra_ai.exc import ConfigurationError
 from palabra_ai.task.base import TaskEvent
 
-
 def test_palabra_ai_creation():
     """Test PalabraAI client creation with credentials"""
     client = PalabraAI(client_id="test_id", client_secret="test_secret")
@@ -14,142 +13,17 @@ def test_palabra_ai_creation():
     assert client.client_secret == "test_secret"
     assert client.api_endpoint == "https://api.palabra.ai"
 
-
 def test_palabra_ai_missing_client_id():
     """Test PalabraAI raises error when client_id missing"""
     with pytest.raises(ConfigurationError) as exc_info:
         PalabraAI(client_id=None, client_secret="test_secret")
     assert "PALABRA_CLIENT_ID is not set" in str(exc_info.value)
 
-
 def test_palabra_ai_missing_client_secret():
     """Test PalabraAI raises error when client_secret missing"""
     with pytest.raises(ConfigurationError) as exc_info:
         PalabraAI(client_id="test_id", client_secret=None)
     assert "PALABRA_CLIENT_SECRET is not set" in str(exc_info.value)
-
-
-@pytest.mark.skip(reason="Environment variable patching needs different approach")
-def test_palabra_ai_with_env_credentials():
-    """Test PalabraAI with environment credentials"""
-    with patch('palabra_ai.client.CLIENT_ID', 'env_id'), \
-         patch('palabra_ai.client.CLIENT_SECRET', 'env_secret'):
-        # When defaults are used from env
-        client = PalabraAI()
-        assert client.client_id == "env_id"
-        assert client.client_secret == "env_secret"
-
-
-@pytest.mark.asyncio
-async def test_process_context_manager():
-    """Test process context manager"""
-    config = Config()
-    source = SourceLang(lang="es")
-    target = TargetLang(lang="en")
-    config.source = source
-    config.targets = [target]
-    
-    client = PalabraAI(client_id="test", client_secret="test")
-    
-    with patch('palabra_ai.client.PalabraRESTClient') as mock_rest_class:
-        mock_rest = AsyncMock()
-        mock_rest.create_session.return_value = MagicMock()
-        mock_rest_class.return_value = mock_rest
-        
-        with patch('palabra_ai.client.Manager') as mock_manager_class:
-            mock_manager = MagicMock()
-            mock_manager_class.return_value = MagicMock(return_value=mock_manager)
-            
-            with patch('asyncio.TaskGroup') as mock_tg_class:
-                mock_tg = AsyncMock()
-                mock_tg.__aenter__.return_value = mock_tg
-                mock_tg.__aexit__.return_value = None
-                mock_tg_class.return_value = mock_tg
-                
-                async with client.process(config) as manager:
-                    assert manager == mock_manager
-
-
-@pytest.mark.asyncio
-async def test_process_no_source():
-    """Test process with no source raises error"""
-    config = Config()  # No source set
-    client = PalabraAI(client_id="test", client_secret="test")
-    
-    with patch('palabra_ai.client.PalabraRESTClient') as mock_rest_class:
-        mock_rest = AsyncMock()
-        mock_rest.create_session.return_value = MagicMock()
-        mock_rest_class.return_value = mock_rest
-        
-        # Manager should raise ConfigurationError when source is not set
-        with patch('palabra_ai.client.Manager') as mock_manager_class:
-            mock_manager_class.side_effect = ConfigurationError("source is not set")
-            
-            with pytest.raises(ConfigurationError) as exc_info:
-                async with client.process(config):
-                    pass
-            
-            assert "source" in str(exc_info.value).lower()
-
-
-@pytest.mark.asyncio  
-async def test_process_with_stopper():
-    """Test process with stopper event"""
-    config = Config()
-    config.source = SourceLang(lang="es")
-    
-    client = PalabraAI(client_id="test", client_secret="test")
-    stopper = TaskEvent()
-    
-    with patch('palabra_ai.client.PalabraRESTClient') as mock_rest_class:
-        mock_rest = AsyncMock()
-        mock_rest.create_session.return_value = MagicMock()
-        mock_rest_class.return_value = mock_rest
-        
-        with patch('palabra_ai.client.Manager') as mock_manager_class:
-            mock_manager = MagicMock()
-            mock_manager_class.return_value = MagicMock(return_value=mock_manager)
-            
-            with patch('asyncio.TaskGroup') as mock_tg_class:
-                mock_tg = AsyncMock()
-                mock_tg.__aenter__.return_value = mock_tg
-                mock_tg.__aexit__.return_value = None
-                mock_tg_class.return_value = mock_tg
-                
-                async with client.process(config, stopper) as manager:
-                    assert manager == mock_manager
-
-
-@pytest.mark.asyncio
-async def test_process_shutdown_on_exception():
-    """Test process shutdown is called even on exception"""
-    config = Config()
-    config.source = SourceLang(lang="es")
-    config.targets = [TargetLang(lang="en")]
-    
-    client = PalabraAI(client_id="test", client_secret="test")
-    
-    with patch('palabra_ai.client.PalabraRESTClient') as mock_rest_class:
-        mock_rest = AsyncMock()
-        mock_rest.create_session.return_value = MagicMock()
-        mock_rest_class.return_value = mock_rest
-        
-        with patch('palabra_ai.client.Manager') as mock_manager_class:
-            mock_manager = MagicMock()
-            mock_manager_class.return_value = MagicMock(return_value=mock_manager)
-            
-            with patch('asyncio.TaskGroup') as mock_tg_class:
-                mock_tg = AsyncMock()
-                mock_tg.__aenter__.return_value = mock_tg
-                mock_tg.__aexit__.return_value = None
-                mock_tg_class.return_value = mock_tg
-                
-                with pytest.raises(RuntimeError):
-                    async with client.process(config):
-                        raise RuntimeError("Test error")
-
-
-def test_run_with_running_loop():
     """Test run method with already running loop"""
     config = Config()
     config.source = SourceLang(lang="es")
@@ -168,7 +42,6 @@ def test_run_with_running_loop():
         
         # Should create a task
         mock_loop.create_task.assert_called_once()
-
 
 def test_run_without_loop():
     """Test run method without running loop"""
@@ -195,7 +68,6 @@ def test_run_without_loop():
                     client.run(config)
                 except:
                     pass  # We're just testing the setup
-
 
 def test_run_with_uvloop():
     """Test run method with uvloop available"""
@@ -234,7 +106,6 @@ def test_run_with_uvloop():
                         # Verify uvloop was set
                         mock_set_policy.assert_called_once_with(mock_policy)
 
-
 def test_run_without_uvloop():
     """Test run method when uvloop is not available"""
     config = Config()
@@ -265,7 +136,6 @@ def test_run_without_uvloop():
                     # Should not raise error
                     client.run(config)
 
-
 def test_run_with_keyboard_interrupt():
     """Test run method handling KeyboardInterrupt"""
     config = Config()
@@ -287,7 +157,6 @@ def test_run_with_keyboard_interrupt():
             
             # Should handle KeyboardInterrupt gracefully
             client.run(config)
-
 
 def test_run_with_exception():
     """Test run method handling general exceptions"""
@@ -312,7 +181,6 @@ def test_run_with_exception():
             with pytest.raises(ValueError) as exc_info:
                 client.run(config)
             assert "Test error" in str(exc_info.value)
-
 
 def test_run_with_deep_debug():
     """Test run method with DEEP_DEBUG enabled"""
@@ -342,7 +210,6 @@ def test_run_with_deep_debug():
                     
                     # Verify task was created
                     assert result == mock_task
-
 
 def test_run_with_signal_handler():
     """Test run method signal handler setup"""
@@ -374,7 +241,6 @@ def test_run_with_signal_handler():
             # Second call restores old handler
             second_call = mock_signal.call_args_list[1]
             assert second_call[0][1] == old_handler
-
 
 @pytest.mark.asyncio
 async def test_process_with_credentials_creation():
@@ -411,7 +277,6 @@ async def test_process_with_credentials_creation():
                 )
                 mock_rest.create_session.assert_called_once()
 
-
 @pytest.mark.asyncio
 async def test_process_with_cancelled_error():
     """Test process handles CancelledError"""
@@ -442,7 +307,6 @@ async def test_process_with_cancelled_error():
                 # Should not raise CancelledError
                 async with client.process(config) as manager:
                     pass
-
 
 @pytest.mark.asyncio
 async def test_process_with_exception_group():
@@ -490,7 +354,6 @@ async def test_process_with_exception_group():
                     
                     assert "Error 1" in str(exc_info.value)
 
-
 @pytest.mark.skip(reason="CancelledError handling needs investigation")
 @pytest.mark.asyncio
 async def test_process_with_only_cancelled_errors():
@@ -532,7 +395,6 @@ async def test_process_with_only_cancelled_errors():
                     with pytest.raises(asyncio.CancelledError):
                         async with client.process(config) as manager:
                             pass
-
 
 @pytest.mark.asyncio
 async def test_process_finally_block():

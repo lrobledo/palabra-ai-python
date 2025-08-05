@@ -10,7 +10,6 @@ from palabra_ai.task.adapter.dummy import DummyWriter
 from palabra_ai.task.base import TaskEvent
 from palabra_ai.constant import BOOT_TIMEOUT, SAFE_PUBLICATION_END_DELAY
 
-
 class MockReader(Reader):
     """Mock reader for testing"""
     def __init__(self):
@@ -34,7 +33,6 @@ class MockReader(Reader):
     async def read(self):
         pass
 
-
 class MockWriter(Writer):
     """Mock writer for testing"""
     def __init__(self):
@@ -57,7 +55,6 @@ class MockWriter(Writer):
     
     async def write(self, audio_frame):
         pass
-
 
 class TestManager:
     """Test Manager class"""

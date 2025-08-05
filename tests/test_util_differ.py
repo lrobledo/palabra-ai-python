@@ -1,13 +1,11 @@
 import pytest
 from palabra_ai.util.differ import is_dict_subset
 
-
 def test_is_dict_subset_empty():
     """Test empty dict is subset of any dict"""
     assert is_dict_subset({}, {})
     assert is_dict_subset({}, {"a": 1})
     assert is_dict_subset({}, {"a": 1, "b": 2})
-
 
 def test_is_dict_subset_simple():
     """Test simple dict subset"""
@@ -16,7 +14,6 @@ def test_is_dict_subset_simple():
     assert is_dict_subset({"a": 1}, superset)
     assert is_dict_subset({"a": 1, "b": 2}, superset)
     assert is_dict_subset({"a": 1, "b": 2, "c": 3}, superset)
-
 
 def test_is_dict_subset_not_subset():
     """Test when not a subset"""
@@ -30,7 +27,6 @@ def test_is_dict_subset_not_subset():
     
     # Extra key
     assert not is_dict_subset({"a": 1, "b": 2, "c": 3}, superset)
-
 
 def test_is_dict_subset_nested():
     """Test nested dict subset"""
@@ -52,7 +48,6 @@ def test_is_dict_subset_nested():
     assert not is_dict_subset({"b": {"x": 11}}, superset)
     assert not is_dict_subset({"b": {"z": {"deep": False}}}, superset)
 
-
 def test_is_dict_subset_with_lists():
     """Test dict subset with lists"""
     superset = {
@@ -71,7 +66,6 @@ def test_is_dict_subset_with_lists():
     # Different list values
     assert not is_dict_subset({"a": [1, 2, 4]}, superset)
     assert not is_dict_subset({"b": ["x", "z", "y"]}, superset)  # Order matters
-
 
 def test_is_dict_subset_list_with_dicts():
     """Test dict subset with lists containing dicts"""
@@ -100,7 +94,6 @@ def test_is_dict_subset_list_with_dicts():
     }
     assert not is_dict_subset(subset_wrong, superset)
 
-
 def test_is_dict_subset_type_errors():
     """Test type errors"""
     with pytest.raises(TypeError) as exc_info:
@@ -114,34 +107,6 @@ def test_is_dict_subset_type_errors():
     with pytest.raises(TypeError) as exc_info:
         is_dict_subset([], [])
     assert "Both arguments must be dictionaries" in str(exc_info.value)
-
-
-@pytest.mark.skip(reason="Temporarily disabled for coverage check")
-def test_is_dict_subset_mixed_types():
-    """Test mixed types in values"""
-    superset = {
-        "int": 123,
-        "float": 45.6,
-        "str": "hello",
-        "bool": True,
-        "none": None,
-        "list": [1, 2, 3],
-        "dict": {"nested": "value"}
-    }
-    
-    # Same types
-    assert is_dict_subset({"int": 123}, superset)
-    assert is_dict_subset({"float": 45.6}, superset)
-    assert is_dict_subset({"str": "hello"}, superset)
-    assert is_dict_subset({"bool": True}, superset)
-    assert is_dict_subset({"none": None}, superset)
-    
-    # Different types but same value representation
-    assert not is_dict_subset({"int": "123"}, superset)  # String vs int
-    assert not is_dict_subset({"bool": 1}, superset)  # Int vs bool
-
-
-def test_is_dict_subset_complex_nested():
     """Test complex nested structure"""
     superset = {
         "config": {
