@@ -12,6 +12,7 @@ dependencies = [
     "aiohttp>=3.9,<4",
     "aioshutdown>=0.0.4",
     "av>=13.0.0",
+    "certifi>=2023.0.0",
     "environs>=14.1",
     "librosa>=0.10.2",
     "livekit>=0.17.5,<2",

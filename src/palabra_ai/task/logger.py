@@ -33,21 +33,21 @@ class Logger(Task):
     _: KW_ONLY
     _messages: list[dict] = field(default_factory=list, init=False)
     _start_ts: float = field(default_factory=time.time, init=False)
-    _rt_in_sub: Subscription | None = field(default=None, init=False)
-    _rt_out_sub: Subscription | None = field(default=None, init=False)
+    _io_in_sub: Subscription | None = field(default=None, init=False)
+    _io_out_sub: Subscription | None = field(default=None, init=False)
     _in_task: asyncio.Task | None = field(default=None, init=False)
     _out_task: asyncio.Task | None = field(default=None, init=False)
 
     def __post_init__(self):
-        self._rt_in_sub = self.rt.in_foq.subscribe(self, maxsize=0)
-        self._rt_out_sub = self.rt.out_foq.subscribe(self, maxsize=0)
+        self._io_in_sub = self.io.in_msg_foq.subscribe(self, maxsize=0)
+        self._io_out_sub = self.io.out_msg_foq.subscribe(self, maxsize=0)
 
     async def boot(self):
         self._in_task = self.sub_tg.create_task(
-            self._consume(self._rt_in_sub.q), name="Logger:rt_in"
+            self._consume(self._io_in_sub.q), name="Logger:io_in"
         )
         self._out_task = self.sub_tg.create_task(
-            self._consume(self._rt_out_sub.q), name="Logger:rt_out"
+            self._consume(self._io_out_sub.q), name="Logger:io_out"
         )
         debug(f"Logger started, writing to {self.cfg.log_file}")
 
@@ -93,8 +93,8 @@ class Logger(Task):
 
         debug(f"Saved {len(self._messages)} messages to {self.cfg.trace_file}")
 
-        self.rt.in_foq.unsubscribe(self)
-        self.rt.out_foq.unsubscribe(self)
+        self.io.in_msg_foq.unsubscribe(self)
+        self.io.out_msg_foq.unsubscribe(self)
 
         debug(f"{self.name} tasks cancelled, waiting for completion...")
         await asyncio.gather(
